@@ -9,7 +9,7 @@ Contributions are welcome when they improve security, bilingual rendering, deliv
 - CSV validation improvements.
 - Queue retry and observability improvements.
 - Security hardening notes.
-- Deployment examples for UAE-hosted infrastructure.
+- Deployment examples for approved institutional infrastructure.
 
 ## Development Checks
 

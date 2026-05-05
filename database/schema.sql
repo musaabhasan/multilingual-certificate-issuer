@@ -56,6 +56,19 @@ CREATE TABLE certificate_templates (
     CONSTRAINT fk_template_approved_by FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
+CREATE TABLE certificate_template_versions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    template_id BIGINT UNSIGNED NOT NULL,
+    version INT UNSIGNED NOT NULL,
+    layout_json JSON NOT NULL,
+    change_summary VARCHAR(500) NULL,
+    created_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_template_version (template_id, version),
+    CONSTRAINT fk_template_version_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE CASCADE,
+    CONSTRAINT fk_template_version_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
 CREATE TABLE recipient_batches (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     template_id BIGINT UNSIGNED NOT NULL,
@@ -85,7 +98,10 @@ CREATE TABLE certificate_jobs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     recipient_id BIGINT UNSIGNED NOT NULL,
     template_id BIGINT UNSIGNED NOT NULL,
+    certificate_number VARCHAR(190) NULL UNIQUE,
     pdf_path VARCHAR(500) NULL,
+    pdf_sha256 CHAR(64) NULL,
+    verification_token_hash CHAR(64) NULL,
     status ENUM('pending', 'rendering', 'rendered', 'failed') NOT NULL DEFAULT 'pending',
     failure_reason TEXT NULL,
     rendered_at DATETIME NULL,
@@ -93,6 +109,17 @@ CREATE TABLE certificate_jobs (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_job_recipient FOREIGN KEY (recipient_id) REFERENCES recipients(id) ON DELETE CASCADE,
     CONSTRAINT fk_job_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
+CREATE TABLE certificate_verification_events (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    certificate_job_id BIGINT UNSIGNED NOT NULL,
+    success TINYINT(1) NOT NULL DEFAULT 0,
+    ip_address VARBINARY(16) NULL,
+    user_agent VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_verification_job (certificate_job_id, created_at),
+    CONSTRAINT fk_verification_job FOREIGN KEY (certificate_job_id) REFERENCES certificate_jobs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 CREATE TABLE email_templates (
@@ -128,6 +155,17 @@ CREATE TABLE mail_queue (
     INDEX idx_queue_ready (status, scheduled_at, next_attempt_at),
     CONSTRAINT fk_queue_job FOREIGN KEY (certificate_job_id) REFERENCES certificate_jobs(id) ON DELETE CASCADE,
     CONSTRAINT fk_queue_smtp FOREIGN KEY (smtp_profile_id) REFERENCES smtp_profiles(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
+CREATE TABLE delivery_events (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    mail_queue_id BIGINT UNSIGNED NOT NULL,
+    event_type ENUM('queued', 'processing', 'sent', 'retry_scheduled', 'failed', 'bounce') NOT NULL,
+    provider_message_id VARCHAR(255) NULL,
+    metadata_json JSON NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_delivery_queue (mail_queue_id, created_at),
+    CONSTRAINT fk_delivery_event_queue FOREIGN KEY (mail_queue_id) REFERENCES mail_queue(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 CREATE TABLE audit_log (

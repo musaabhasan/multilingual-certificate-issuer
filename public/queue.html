@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Distribution Queue</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="/">Certificate Issuer</a>
+    <nav aria-label="Primary navigation">
+        <a href="/designer.html">Designer</a>
+        <a href="/import.html">Import</a>
+        <a href="/queue.html" aria-current="page">Queue</a>
+        <a href="/verify.php">Verify</a>
+    </nav>
+</header>
+<main class="shell">
+    <section class="page-title compact">
+        <div>
+            <p class="eyebrow">SMTP distribution</p>
+            <h1>Queue monitor</h1>
+            <p>Track scheduled delivery, retry behavior, throttling, and failed messages.</p>
+        </div>
+        <div class="actions">
+            <button class="primary" type="button">Start batch</button>
+            <button type="button">Pause queue</button>
+        </div>
+    </section>
+
+    <section class="metric-grid">
+        <article class="metric"><span class="metric-label">Pending</span><strong>248</strong><span class="metric-note">Scheduled</span></article>
+        <article class="metric"><span class="metric-label">Sent</span><strong>1,172</strong><span class="metric-note positive">Delivered</span></article>
+        <article class="metric"><span class="metric-label">Retries</span><strong>11</strong><span class="metric-note warning">15 min backoff</span></article>
+        <article class="metric"><span class="metric-label">Throttle</span><strong>60s</strong><span class="metric-note">Per message</span></article>
+    </section>
+
+    <section class="workspace">
+        <article class="panel span-2">
+            <div class="panel-header">
+                <h2>Delivery timeline</h2>
+                <span class="status ready">Worker healthy</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Recipient</th><th>Status</th><th>Attempts</th><th>Next action</th></tr></thead>
+                <tbody>
+                <tr><td>aisha@example.edu</td><td><span class="pill sent">Sent</span></td><td>1</td><td>Completed</td></tr>
+                <tr><td>omar@example.edu</td><td><span class="pill queued">Pending</span></td><td>0</td><td>09:18</td></tr>
+                <tr><td>fatima@example.edu</td><td><span class="pill failed">Retry</span></td><td>2</td><td>09:31</td></tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article class="panel">
+            <h2>SMTP profile</h2>
+            <dl class="detail-list">
+                <div><dt>Host</dt><dd>smtp.example.edu</dd></div>
+                <div><dt>Encryption</dt><dd>TLS</dd></div>
+                <div><dt>Credential</dt><dd>Encrypted</dd></div>
+                <div><dt>From</dt><dd>certificates@example.edu</dd></div>
+            </dl>
+        </article>
+    </section>
+</main>
+</body>
+</html>

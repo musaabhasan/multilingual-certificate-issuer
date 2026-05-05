@@ -7,15 +7,64 @@
     <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
+<header class="topbar">
+    <a class="brand" href="/">Certificate Issuer</a>
+    <nav aria-label="Primary navigation">
+        <a href="/designer.html" aria-current="page">Designer</a>
+        <a href="/import.html">Import</a>
+        <a href="/queue.html">Queue</a>
+        <a href="/verify.php">Verify</a>
+    </nav>
+</header>
+
 <main class="shell">
-    <section class="toolbar">
-        <h1>Template Designer Prototype</h1>
-        <button id="addText" type="button">Add Text</button>
-        <button id="exportLayout" type="button">Export JSON</button>
+    <section class="page-title compact">
+        <div>
+            <p class="eyebrow">Template studio</p>
+            <h1>Designer</h1>
+            <p>Position bilingual text fields, choose direction, and export production-ready layout JSON.</p>
+        </div>
+        <div class="actions">
+            <button id="addText" class="primary" type="button">Add field</button>
+            <button id="exportLayout" type="button">Export JSON</button>
+        </div>
     </section>
-    <section class="designer">
-        <div id="canvas" class="canvas" aria-label="Certificate canvas"></div>
-        <textarea id="layoutOutput" spellcheck="false" aria-label="Template JSON output"></textarea>
+
+    <section class="designer-layout">
+        <aside class="panel tool-panel">
+            <h2>Selected field</h2>
+            <label>Label <input id="fieldLabel" type="text" value="Recipient Name"></label>
+            <label>CSV source <input id="fieldSource" type="text" value="name_en"></label>
+            <label>Direction
+                <select id="fieldDirection">
+                    <option value="ltr">LTR</option>
+                    <option value="rtl">RTL</option>
+                </select>
+            </label>
+            <label>Alignment
+                <select id="fieldAlign">
+                    <option value="center">Center</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                </select>
+            </label>
+            <label>Font size <input id="fieldSize" type="number" min="8" max="72" value="20"></label>
+            <label>Color <input id="fieldColor" type="color" value="#111827"></label>
+            <button id="applyField" type="button">Apply field settings</button>
+        </aside>
+
+        <section class="designer-stage" aria-label="Certificate layout workspace">
+            <div class="canvas-meta">
+                <span>A4 landscape</span>
+                <span>297 x 210 mm</span>
+            </div>
+            <div id="canvas" class="canvas" aria-label="Certificate canvas"></div>
+        </section>
+
+        <aside class="panel output-panel">
+            <h2>Layout JSON</h2>
+            <textarea id="layoutOutput" spellcheck="false" aria-label="Template JSON output"></textarea>
+        </aside>
     </section>
 </main>
 <script src="/assets/designer.js"></script>

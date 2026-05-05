@@ -8,6 +8,10 @@ use InvalidArgumentException;
 
 final class CsvImporter
 {
+    public function __construct(private readonly ?UploadValidator $uploadValidator = null)
+    {
+    }
+
     /**
      * @return array<int, array<string, string>>
      */
@@ -34,7 +38,8 @@ final class CsvImporter
 
             $record = [];
             foreach ($headers as $index => $header) {
-                $record[$header] = isset($row[$index]) ? trim((string) $row[$index]) : '';
+                $value = isset($row[$index]) ? trim((string) $row[$index]) : '';
+                $record[$header] = $this->uploadValidator?->safeSpreadsheetCell($value) ?? $value;
             }
             $rows[] = $record;
         }

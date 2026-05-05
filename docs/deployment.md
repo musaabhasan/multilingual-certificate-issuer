@@ -1,18 +1,18 @@
-# UAE Deployment Guide
+# Deployment Guide
 
-This guide describes a production deployment pattern for organizations that require UAE-based hosting and controlled data residency.
+This guide describes a production deployment pattern for organizations that need controlled hosting, secure storage, and reliable SMTP delivery.
 
 ## Recommended Topology
 
 | Layer | Recommendation |
 | --- | --- |
-| Hosting | UAE region cloud, UAE data center, or approved institutional infrastructure |
+| Hosting | Approved cloud, institutional infrastructure, or private data center |
 | Web | PHP 8.3 with Apache or Nginx + PHP-FPM |
 | Database | Managed MySQL 8.0 or hardened self-hosted MySQL |
-| Storage | Encrypted local disk or approved object storage in UAE region |
+| Storage | Encrypted local disk or approved object storage |
 | SMTP | Institutional mail server with TLS |
 | Queue | CRON or supervisor-managed PHP worker |
-| Backups | Encrypted and stored in approved UAE location |
+| Backups | Encrypted and stored in approved backup locations |
 
 ## Environment Setup
 
@@ -73,4 +73,4 @@ The application key is required to decrypt SMTP credentials. Store it separately
 - Audit logs reviewed.
 - Backup and restore tested.
 - VAPT complete.
-- Data residency reviewed and approved.
+- Hosting, backup, and privacy requirements reviewed and approved.

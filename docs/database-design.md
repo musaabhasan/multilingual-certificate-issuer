@@ -20,11 +20,14 @@ This supports Arabic, English, symbols, and mixed-direction text. Application re
 | `mfa_secrets` | Encrypted TOTP secrets |
 | `smtp_profiles` | Institutional SMTP settings with encrypted passwords |
 | `certificate_templates` | Approved and draft template layouts |
+| `certificate_template_versions` | Version history for layout changes |
 | `recipient_batches` | CSV upload batches linked to a template |
 | `recipients` | Recipient rows with normalized fields and full JSON payload |
 | `certificate_jobs` | Rendering state and PDF path per recipient |
+| `certificate_verification_events` | Public verification attempts and lookup audit data |
 | `email_templates` | Bilingual email bodies and dynamic tags |
 | `mail_queue` | Scheduled, throttled, retryable email delivery |
+| `delivery_events` | Queue lifecycle, retry, sent, failed, and bounce events |
 | `audit_log` | Administrative and system activity |
 
 ## Certificate Lifecycle
@@ -38,6 +41,7 @@ stateDiagram-v2
     RecipientsValidated --> PdfRendering
     PdfRendering --> PdfRendered
     PdfRendered --> Queued
+    PdfRendered --> VerificationReady
     Queued --> Sent
     Queued --> Failed
     Failed --> Queued: retry
@@ -52,6 +56,8 @@ Recommended defaults:
 | CSV upload source | Delete after validation unless policy requires retention |
 | Recipient rows | Retain according to certificate verification and privacy policy |
 | Generated PDFs | Retain for the certificate validity period or institutional policy |
+| Verification events | Retain for audit and abuse monitoring |
+| Delivery events | Retain for operational reporting and SMTP troubleshooting |
 | Audit logs | Minimum 1 year; longer for regulated environments |
 | SMTP test logs | 30 to 90 days |
 

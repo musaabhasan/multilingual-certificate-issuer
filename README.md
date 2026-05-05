@@ -15,8 +15,11 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
+| Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
+| Email templates | Dynamic message content | `{{tag}}` rendering for bilingual recipient and certificate fields |
+| Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
 | Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
-| Data residency | UAE deployment readiness | Self-hosted deployment, MySQL encryption guidance, local storage controls |
+| Deployment readiness | Production hosting guidance | Self-hosted deployment, MySQL encryption guidance, private storage controls |
 
 ## Repository Structure
 
@@ -27,7 +30,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | `src/Mail` | Encrypted SMTP profile handling and certificate mailer |
 | `src/Queue` | Throttled distribution worker |
 | `src/Security` | Encryption, MFA/password policy helpers, audit logging |
-| `public` | Minimal web entrypoint and visual designer assets |
+| `public` | Dashboard, designer, import, queue, and verification UI surfaces |
 | `database/schema.sql` | MySQL 8.0 schema with bilingual-safe collations |
 | `docs` | Architecture, security model, deployment, and project plan |
 | `examples` | Sample Arabic/English CSV and template layout |
@@ -41,7 +44,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Database Design](docs/database-design.md) | Tables, lifecycle, retention, and privacy notes |
 | [API Contracts](docs/api-contracts.md) | Stable request and response shapes for future controllers |
 | [Project Plan](docs/project-plan.md) | Four-phase implementation plan with acceptance criteria |
-| [UAE Deployment](docs/deployment-uae.md) | Hosting, worker, backup, and go-live guidance |
+| [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 
 ## Quick Start
@@ -54,6 +57,10 @@ docker compose up --build
 Open:
 
 - Application: <http://localhost:8080>
+- Designer: <http://localhost:8080/designer.html>
+- CSV import: <http://localhost:8080/import.html>
+- Queue monitor: <http://localhost:8080/queue.html>
+- Verification: <http://localhost:8080/verify.php>
 - Mailpit SMTP viewer: <http://localhost:8025>
 - MySQL: `localhost:3307`
 
@@ -119,12 +126,23 @@ Example CRON entry for a queue worker every minute:
 
 Each queue item has `scheduled_at`, `attempts`, `next_attempt_at`, and `sent_at` fields. Delivery speed is controlled by `QUEUE_THROTTLE_SECONDS`.
 
+## Verification Flow
+
+Generated certificate jobs can store a public certificate number, a PDF SHA-256 hash, and a hashed verification token. The public verification page accepts the certificate number and token, then returns only safe certificate metadata.
+
+Recommended production additions:
+
+- QR code pointing to the verification route.
+- Rate limits on verification attempts.
+- Public response that confirms validity without exposing private CSV data.
+- Administrative report of verification lookups.
+
 ## Project Phases
 
 1. Core infrastructure, database, authentication, MFA, SMTP encryption.
 2. Visual template designer and bilingual PDF rendering.
 3. CSV import, dynamic mapping, email template editor, throttled queue.
-4. UAT, hardening, vulnerability assessment, and UAE-based deployment.
+4. UAT, hardening, vulnerability assessment, and production deployment.
 
 Detailed phase actions are documented in [docs/project-plan.md](docs/project-plan.md).
 
@@ -137,7 +155,7 @@ The repository is designed for institutions that need controlled digital credent
 - SMTP deliverability testing,
 - Arabic/English rendering UAT,
 - backup and restore testing,
-- data residency review,
+- hosting and privacy review,
 - privacy and retention review.
 
 ## License

@@ -7,7 +7,8 @@ The platform has four operational areas:
 1. Administrative web application for templates, recipients, SMTP profiles, and delivery schedules.
 2. Certificate rendering service that converts approved layouts and recipient data into PDF/A.
 3. Distribution queue that sends certificates through institutional SMTP at controlled speed.
-4. Audit and security layer that records administrative activity, authentication events, and delivery outcomes.
+4. Verification and reporting layer that validates issued credentials and monitors delivery.
+5. Audit and security layer that records administrative activity, authentication events, and delivery outcomes.
 
 ```mermaid
 flowchart LR
@@ -21,6 +22,8 @@ flowchart LR
     Queue --> Worker["Queue Worker / CRON"]
     Worker --> SMTP["Institutional SMTP"]
     SMTP --> Recipient["Recipient"]
+    Recipient --> Verify["Verification Portal"]
+    Verify --> MySQL
 ```
 
 ## Runtime Components
@@ -32,6 +35,7 @@ flowchart LR
 | PDF renderer | Converts layout JSON and recipient rows into PDF/A certificates |
 | SMTP module | Stores encrypted SMTP profiles and sends attachments through TLS/SSL |
 | Queue worker | Sends one message at configured intervals and records retry outcomes |
+| Verification portal | Confirms issued certificates using certificate number and token |
 | Audit logger | Captures administrative actions and system events |
 
 ## Data Flow
@@ -44,7 +48,8 @@ flowchart LR
 6. Renderer generates one PDF/A file per recipient.
 7. Operator selects email template, SMTP profile, schedule, and throttling speed.
 8. Queue worker sends messages at the configured interval.
-9. Audit log records the full chain.
+9. Recipients can verify certificate metadata through the verification portal.
+10. Audit log records the full chain.
 
 ## Design Decisions
 
@@ -54,11 +59,11 @@ flowchart LR
 - Keep the queue in MySQL for operational simplicity in small and mid-sized institutions.
 - Use CRON or a process supervisor for scheduled delivery.
 - Make template layout data explicit JSON so it can be versioned and reviewed.
+- Store only hashed verification tokens so public validation links do not expose reusable secrets in the database.
 
 ## Future Extensions
 
 - SAML/OIDC single sign-on.
-- Per-certificate QR verification portal.
 - Signed PDF support.
 - Object storage backend.
 - Role-based approval workflows.

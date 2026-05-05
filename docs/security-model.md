@@ -9,8 +9,9 @@
 | CSV injection or malformed data | Header validation, row limits, formula-prefix neutralization before export |
 | Unauthorized certificate generation | Role-based access, template approval, audit logging |
 | Certificate tampering | Private storage, PDF hash logging, optional future digital signatures |
+| Verification endpoint abuse | Hashed tokens, lookup logging, rate limiting, safe metadata responses |
 | Bulk email abuse | Queue throttling, role separation, SMTP profile approval |
-| Data residency violation | UAE-hosted infrastructure, controlled backups, no third-party storage by default |
+| Unapproved storage or processing location | Approved hosting policy, controlled backups, no third-party storage by default |
 | Public exposure of generated PDFs | Storage outside web root, signed download routes only |
 
 ## Roles
@@ -58,6 +59,7 @@ At minimum, log:
 - PDF generation,
 - queue schedule, pause, resume,
 - message sent, failed, retried,
+- certificate verification lookups,
 - administrator user changes.
 
 ## File Upload Controls

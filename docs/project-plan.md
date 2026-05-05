@@ -26,6 +26,7 @@
 | Email template editor | Dynamic tags for name, identifier, date | Preview shows resolved tags for sample recipient |
 | Queue system | MySQL-backed mail queue | Delivery respects throttle interval and scheduled time |
 | Retry strategy | Attempts and next-attempt fields | Failed sends retry and eventually mark failed |
+| Verification flow | Certificate number, hashed token, and lookup events | Public verification returns safe certificate metadata |
 
 ## Phase 4: Testing, Hardening, And Deployment
 
@@ -33,7 +34,7 @@
 | --- | --- | --- |
 | UAT with Arabic and English data | Test scripts and sign-off checklist | Mixed RTL/LTR certificates pass user review |
 | Security hardening | VAPT, input validation, secrets review | Critical and high findings remediated |
-| Deployment | UAE-hosted production environment | Data, backups, and logs remain in approved hosting region |
+| Deployment | Hardened production environment | Data, backups, logs, and SMTP traffic follow approved hosting policy |
 | Operations handover | Runbook and admin training | Team can operate, recover, and audit the platform |
 
 ## Definition Of Done
@@ -43,6 +44,7 @@
 - PDF files generated outside public root.
 - Arabic and English samples pass visual inspection.
 - Queue throttling works at 1 email per 60 seconds or configured rate.
+- Certificate verification works without exposing private recipient data.
 - Audit trail covers template, CSV, PDF, and email actions.
 - Backup and restore are tested.
 - VAPT is completed before production release.

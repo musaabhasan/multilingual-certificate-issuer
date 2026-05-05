@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Recipient Import</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="/">Certificate Issuer</a>
+    <nav aria-label="Primary navigation">
+        <a href="/designer.html">Designer</a>
+        <a href="/import.html" aria-current="page">Import</a>
+        <a href="/queue.html">Queue</a>
+        <a href="/verify.php">Verify</a>
+    </nav>
+</header>
+<main class="shell">
+    <section class="page-title compact">
+        <div>
+            <p class="eyebrow">Recipient data</p>
+            <h1>CSV import and mapping</h1>
+            <p>Validate bilingual recipient rows before certificate generation.</p>
+        </div>
+    </section>
+
+    <section class="workspace">
+        <article class="panel">
+            <h2>Upload checks</h2>
+            <ul class="check-list">
+                <li>CSV MIME type and size validation</li>
+                <li>Required header detection</li>
+                <li>Duplicate identifier review</li>
+                <li>Spreadsheet formula neutralization</li>
+            </ul>
+        </article>
+
+        <article class="panel span-2">
+            <div class="panel-header">
+                <h2>Column mapping</h2>
+                <span class="status ready">Sample ready</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Certificate field</th><th>CSV header</th><th>Validation</th></tr></thead>
+                <tbody>
+                <tr><td>Recipient email</td><td><code>email</code></td><td><span class="pill sent">Required</span></td></tr>
+                <tr><td>English name</td><td><code>name_en</code></td><td><span class="pill sent">Required</span></td></tr>
+                <tr><td>Arabic name</td><td><code>name_ar</code></td><td><span class="pill queued">RTL</span></td></tr>
+                <tr><td>Certificate id</td><td><code>unique_identifier</code></td><td><span class="pill sent">Unique</span></td></tr>
+                <tr><td>Issue date</td><td><code>issue_date</code></td><td><span class="pill queued">ISO date</span></td></tr>
+                </tbody>
+            </table>
+        </article>
+
+        <article class="panel span-3">
+            <div class="panel-header">
+                <h2>Preview rows</h2>
+                <a href="/queue.html">Continue to queue</a>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>ID</th><th>Name</th><th>Arabic name</th><th>Email</th><th>Status</th></tr></thead>
+                <tbody>
+                <tr><td>CERT-2026-001</td><td>Aisha Al Mansoori</td><td dir="rtl">عائشة المنصوري</td><td>aisha@example.edu</td><td><span class="pill sent">Valid</span></td></tr>
+                <tr><td>CERT-2026-002</td><td>Omar Al Hashimi</td><td dir="rtl">عمر الهاشمي</td><td>omar@example.edu</td><td><span class="pill sent">Valid</span></td></tr>
+                </tbody>
+            </table>
+        </article>
+    </section>
+</main>
+</body>
+</html>

@@ -60,6 +60,32 @@ The first implementation can be server-rendered PHP, but these contracts define 
 }
 ```
 
+## Verify Certificate
+
+`POST /verify`
+
+```json
+{
+  "certificate_number": "CERT-2026-001",
+  "token": "public-verification-token"
+}
+```
+
+Successful response:
+
+```json
+{
+  "valid": true,
+  "certificate": {
+    "certificate_number": "CERT-2026-001",
+    "recipient_name_en": "Aisha Al Mansoori",
+    "recipient_name_ar": "عائشة المنصوري",
+    "template_name_en": "Cybersecurity Awareness",
+    "pdf_sha256": "..."
+  }
+}
+```
+
 ## Error Format
 
 ```json
