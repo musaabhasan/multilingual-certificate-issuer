@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Certificate Template Designer</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<main class="shell">
+    <section class="toolbar">
+        <h1>Template Designer Prototype</h1>
+        <button id="addText" type="button">Add Text</button>
+        <button id="exportLayout" type="button">Export JSON</button>
+    </section>
+    <section class="designer">
+        <div id="canvas" class="canvas" aria-label="Certificate canvas"></div>
+        <textarea id="layoutOutput" spellcheck="false" aria-label="Template JSON output"></textarea>
+    </section>
+</main>
+<script src="/assets/designer.js"></script>
+</body>
+</html>

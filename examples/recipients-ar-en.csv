@@ -1,0 +1,3 @@
+unique_identifier,email,name_en,name_ar,program_en,program_ar,issue_date
+CERT-2026-001,student1@example.edu,Aisha Al Mansoori,عائشة المنصوري,Cybersecurity Awareness,التوعية بالأمن السيبراني,2026-05-05
+CERT-2026-002,student2@example.edu,Omar Al Hashimi,عمر الهاشمي,Digital Transformation,التحول الرقمي,2026-05-05

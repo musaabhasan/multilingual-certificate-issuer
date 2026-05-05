@@ -1,0 +1,52 @@
+{
+  "page": {
+    "width": 297,
+    "height": 210,
+    "orientation": "landscape"
+  },
+  "background": "storage/uploads/backgrounds/sample-certificate.png",
+  "elements": [
+    {
+      "key": "name_ar",
+      "label": "Arabic recipient name",
+      "source": "name_ar",
+      "x": 58,
+      "y": 82,
+      "width": 181,
+      "height": 18,
+      "font": "dejavusans",
+      "fontSize": 24,
+      "align": "center",
+      "direction": "rtl",
+      "color": "#111827"
+    },
+    {
+      "key": "name_en",
+      "label": "English recipient name",
+      "source": "name_en",
+      "x": 58,
+      "y": 103,
+      "width": 181,
+      "height": 14,
+      "font": "dejavusans",
+      "fontSize": 18,
+      "align": "center",
+      "direction": "ltr",
+      "color": "#111827"
+    },
+    {
+      "key": "issue_date",
+      "label": "Issue date",
+      "source": "issue_date",
+      "x": 190,
+      "y": 165,
+      "width": 46,
+      "height": 8,
+      "font": "dejavusans",
+      "fontSize": 10,
+      "align": "center",
+      "direction": "ltr",
+      "color": "#374151"
+    }
+  ]
+}

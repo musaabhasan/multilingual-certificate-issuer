@@ -1,0 +1,145 @@
+# Multilingual Automated Certificate Issuance And Distribution Platform
+
+A secure PHP 8.3 and MySQL 8.0 platform for designing, generating, and distributing bilingual Arabic/English digital certificates at scale.
+
+The platform replaces manual certificate creation with a controlled pipeline: template design, CSV data import, PDF/A generation, SMTP delivery, throttled queues, scheduling, MFA-protected administration, encrypted credentials, and audit logs.
+
+## Core Capabilities
+
+| Category | Capability | Implementation Direction |
+| --- | --- | --- |
+| Architecture | PHP 8.3 application with MySQL 8.0 | Composer autoloading, PDO, Docker, Apache, background worker |
+| Bilingual logic | Arabic and English text in one certificate | UTF-8, `utf8mb4`, RTL/LTR element direction, mPDF Arabic shaping support |
+| Design engine | Visual component builder | Background upload, canvas preview, X/Y text positioning, JSON layout export |
+| Dynamic mapping | CSV fields to template elements | Header-based mapping, batch imports, validation before generation |
+| PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
+| Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
+| Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
+| Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
+| Data residency | UAE deployment readiness | Self-hosted deployment, MySQL encryption guidance, local storage controls |
+
+## Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| `src/Certificate` | CSV mapping, template layout validation, PDF rendering |
+| `src/Database` | PDO connection factory |
+| `src/Mail` | Encrypted SMTP profile handling and certificate mailer |
+| `src/Queue` | Throttled distribution worker |
+| `src/Security` | Encryption, MFA/password policy helpers, audit logging |
+| `public` | Minimal web entrypoint and visual designer assets |
+| `database/schema.sql` | MySQL 8.0 schema with bilingual-safe collations |
+| `docs` | Architecture, security model, deployment, and project plan |
+| `examples` | Sample Arabic/English CSV and template layout |
+
+## Documentation
+
+| Document | Focus |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Runtime components, data flow, and design decisions |
+| [Security Model](docs/security-model.md) | Threats, roles, credential storage, upload controls, and hardening |
+| [Database Design](docs/database-design.md) | Tables, lifecycle, retention, and privacy notes |
+| [API Contracts](docs/api-contracts.md) | Stable request and response shapes for future controllers |
+| [Project Plan](docs/project-plan.md) | Four-phase implementation plan with acceptance criteria |
+| [UAE Deployment](docs/deployment-uae.md) | Hosting, worker, backup, and go-live guidance |
+| [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
+
+## Quick Start
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open:
+
+- Application: <http://localhost:8080>
+- Mailpit SMTP viewer: <http://localhost:8025>
+- MySQL: `localhost:3307`
+
+Run the worker once:
+
+```bash
+docker compose run --rm worker php bin/queue-worker.php --once
+```
+
+Run PHP syntax checks:
+
+```bash
+composer run lint
+```
+
+## Certificate Template Model
+
+Templates are stored as JSON-backed rows and rendered into PDF/A. Each text element declares a CSV source column, position, font size, alignment, color, and direction.
+
+```json
+{
+  "page": { "width": 297, "height": 210, "orientation": "landscape" },
+  "background": "storage/uploads/backgrounds/sample-certificate.png",
+  "elements": [
+    {
+      "key": "recipient_name_ar",
+      "label": "Arabic recipient name",
+      "source": "name_ar",
+      "x": 148.5,
+      "y": 82,
+      "width": 180,
+      "height": 16,
+      "font": "amiri",
+      "fontSize": 24,
+      "align": "center",
+      "direction": "rtl",
+      "color": "#111827"
+    }
+  ]
+}
+```
+
+## Security Baseline
+
+- Store application secrets outside Git.
+- Generate a 32-byte sodium key for `APP_KEY`.
+- Encrypt SMTP passwords before database storage.
+- Enforce MFA for administrators.
+- Rotate passwords every 90 days.
+- Validate uploaded CSV, image, and font files by MIME type and size.
+- Keep generated PDFs outside the public web root.
+- Log authentication, template, SMTP, CSV, generation, and delivery actions.
+- Use TLS for SMTP and HTTPS for the application.
+- Run background delivery through CRON or a process supervisor.
+
+## CRON Scheduling
+
+Example CRON entry for a queue worker every minute:
+
+```cron
+* * * * * cd /var/www/certificate-issuer && php bin/queue-worker.php >> storage/logs/worker.log 2>&1
+```
+
+Each queue item has `scheduled_at`, `attempts`, `next_attempt_at`, and `sent_at` fields. Delivery speed is controlled by `QUEUE_THROTTLE_SECONDS`.
+
+## Project Phases
+
+1. Core infrastructure, database, authentication, MFA, SMTP encryption.
+2. Visual template designer and bilingual PDF rendering.
+3. CSV import, dynamic mapping, email template editor, throttled queue.
+4. UAT, hardening, vulnerability assessment, and UAE-based deployment.
+
+Detailed phase actions are documented in [docs/project-plan.md](docs/project-plan.md).
+
+## Compliance And Operational Notes
+
+The repository is designed for institutions that need controlled digital credential issuance. It does not include a legal compliance opinion. Before production use, perform:
+
+- security architecture review,
+- vulnerability assessment and penetration testing,
+- SMTP deliverability testing,
+- Arabic/English rendering UAT,
+- backup and restore testing,
+- data residency review,
+- privacy and retention review.
+
+## License
+
+MIT

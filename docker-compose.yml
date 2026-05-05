@@ -1,0 +1,58 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: certificate_issuer
+      DB_USERNAME: issuer
+      DB_PASSWORD: change-this-password
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - mysql
+      - mailpit
+
+  worker:
+    build: .
+    command: php bin/queue-worker.php --once
+    environment:
+      APP_ENV: local
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: certificate_issuer
+      DB_USERNAME: issuer
+      DB_PASSWORD: change-this-password
+      QUEUE_THROTTLE_SECONDS: 60
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - mysql
+      - mailpit
+
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_520_ci
+    environment:
+      MYSQL_DATABASE: certificate_issuer
+      MYSQL_USER: issuer
+      MYSQL_PASSWORD: change-this-password
+      MYSQL_ROOT_PASSWORD: root-change-this-password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  mysql-data:

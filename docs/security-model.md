@@ -1,0 +1,81 @@
+# Security Model
+
+## Threats
+
+| Threat | Control |
+| --- | --- |
+| Stolen administrator password | MFA, password rotation, session timeout, audit logs |
+| SMTP credential leakage | Sodium encryption, `.env` key separation, restricted database access |
+| CSV injection or malformed data | Header validation, row limits, formula-prefix neutralization before export |
+| Unauthorized certificate generation | Role-based access, template approval, audit logging |
+| Certificate tampering | Private storage, PDF hash logging, optional future digital signatures |
+| Bulk email abuse | Queue throttling, role separation, SMTP profile approval |
+| Data residency violation | UAE-hosted infrastructure, controlled backups, no third-party storage by default |
+| Public exposure of generated PDFs | Storage outside web root, signed download routes only |
+
+## Roles
+
+| Role | Permissions |
+| --- | --- |
+| Administrator | Manage users, MFA policy, SMTP profiles, system settings |
+| Designer | Create and update certificate templates |
+| Operator | Upload CSV files, generate certificates, schedule delivery |
+| Auditor | Read-only access to audit logs, batches, and delivery reports |
+
+## Authentication Requirements
+
+- MFA must be enabled for administrators.
+- Passwords must be hashed with `password_hash`.
+- Privileged passwords rotate every 90 days.
+- Sessions expire after inactivity.
+- Failed login attempts should lock accounts or trigger review.
+
+## Credential Storage
+
+SMTP passwords are encrypted before database storage:
+
+```php
+$encrypted = SmtpProfile::encryptedPassword($plainTextPassword);
+```
+
+The application key must be a 32-byte random key encoded as base64:
+
+```bash
+php -r "echo 'base64:' . base64_encode(random_bytes(32)) . PHP_EOL;"
+```
+
+Keep `APP_KEY` outside the repository and back it up securely. If it is lost, encrypted SMTP passwords cannot be recovered.
+
+## Audit Events
+
+At minimum, log:
+
+- login success and failure,
+- MFA enrollment and reset,
+- SMTP profile create/update/test,
+- template create/update/approve/retire,
+- CSV upload and mapping,
+- PDF generation,
+- queue schedule, pause, resume,
+- message sent, failed, retried,
+- administrator user changes.
+
+## File Upload Controls
+
+- Restrict background uploads to PNG/JPG by MIME type and extension.
+- Limit upload size.
+- Store uploads outside the public root.
+- Randomize storage names.
+- Strip or ignore original file paths.
+- Generate preview derivatives rather than serving originals directly.
+
+## Production Hardening
+
+- Force HTTPS and secure cookies.
+- Set `APP_DEBUG=false`.
+- Disable directory listing.
+- Use a low-privilege database account.
+- Restrict worker host outbound traffic to approved SMTP servers.
+- Enable database backups with encryption.
+- Monitor queue failure spikes.
+- Perform vulnerability scanning and penetration testing before launch.

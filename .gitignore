@@ -1,0 +1,12 @@
+.env
+.phpunit.cache/
+vendor/
+storage/certificates/
+storage/uploads/
+storage/logs/
+storage/private/
+coverage/
+*.log
+*.pdf
+*.zip
+Thumbs.db

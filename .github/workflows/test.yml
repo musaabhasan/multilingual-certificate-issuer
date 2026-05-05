@@ -1,0 +1,22 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: intl, pdo_mysql, sodium, gd, zip
+      - name: Validate composer
+        run: composer validate --strict
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: PHP syntax check
+        run: composer run lint
