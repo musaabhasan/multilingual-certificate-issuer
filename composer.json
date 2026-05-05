@@ -20,7 +20,7 @@
     }
   },
   "scripts": {
-    "lint": "php -r \"foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator('src')) as $f) { if (pathinfo($f, PATHINFO_EXTENSION) === 'php') passthru('php -l ' . escapeshellarg($f)); }\"",
+    "lint": "php bin/lint.php",
     "worker": "php bin/queue-worker.php"
   },
   "config": {
