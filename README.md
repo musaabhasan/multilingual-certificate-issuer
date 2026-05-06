@@ -1,4 +1,4 @@
-﻿# Multilingual Automated Certificate Issuance And Distribution Platform
+# Multilingual Automated Certificate Issuance And Distribution Platform
 
 A secure PHP 8.3 and MySQL 8.0 platform for designing, generating, and distributing bilingual Arabic/English digital certificates at scale.
 
