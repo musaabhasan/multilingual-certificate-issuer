@@ -113,6 +113,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Enforce MFA for administrators.
 - Rotate passwords every 90 days.
 - Validate uploaded CSV, image, and font files by MIME type and size.
+- Reject CSV files with empty headers, duplicate headers, or excessive recipient row counts.
 - Keep generated PDFs outside the public web root.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
