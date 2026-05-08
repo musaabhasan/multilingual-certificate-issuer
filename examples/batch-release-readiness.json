@@ -1,0 +1,46 @@
+[
+  {
+    "batch_reference": "PD-2026-05-A",
+    "template_status": "approved",
+    "approval": {
+      "approved_by": "quality.manager@example.org",
+      "approved_at": "2026-05-08T13:00:00Z"
+    },
+    "row_count": 240,
+    "rendered_count": 240,
+    "queued_count": 240,
+    "pdf_hash_manifest_verified": true,
+    "suppression_checked": true,
+    "smtp": {
+      "active": true,
+      "spf_aligned": true,
+      "dkim_aligned": true,
+      "dmarc_aligned": true
+    },
+    "throttle_seconds": 60,
+    "scheduled_at": "2026-05-08T18:00:00Z",
+    "delivery_mode": "attachment_and_link"
+  },
+  {
+    "batch_reference": "PD-2026-05-B",
+    "template_status": "draft",
+    "approval": {
+      "approved_by": "",
+      "approved_at": ""
+    },
+    "row_count": 125,
+    "rendered_count": 122,
+    "queued_count": 125,
+    "pdf_hash_manifest_verified": false,
+    "suppression_checked": false,
+    "smtp": {
+      "active": true,
+      "spf_aligned": true,
+      "dkim_aligned": false,
+      "dmarc_aligned": true
+    },
+    "throttle_seconds": 10,
+    "scheduled_at": "not scheduled",
+    "delivery_mode": "attachment"
+  }
+]
