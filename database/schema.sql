@@ -148,12 +148,13 @@ CREATE TABLE mail_queue (
     subject VARCHAR(255) NOT NULL,
     html_body MEDIUMTEXT NOT NULL,
     pdf_path VARCHAR(500) NOT NULL,
-    status ENUM('pending', 'processing', 'sent', 'failed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending', 'processing', 'sent', 'failed', 'suppressed') NOT NULL DEFAULT 'pending',
     attempts INT UNSIGNED NOT NULL DEFAULT 0,
     scheduled_at DATETIME NOT NULL,
     next_attempt_at DATETIME NULL,
     sent_at DATETIME NULL,
     last_error TEXT NULL,
+    suppression_reason VARCHAR(190) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_queue_ready (status, scheduled_at, next_attempt_at),
@@ -161,10 +162,30 @@ CREATE TABLE mail_queue (
     CONSTRAINT fk_queue_smtp FOREIGN KEY (smtp_profile_id) REFERENCES smtp_profiles(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
+CREATE TABLE email_suppressions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    email_hash CHAR(64) NOT NULL,
+    email_mask VARCHAR(255) NOT NULL,
+    scope VARCHAR(120) NULL,
+    reason ENUM('hard_bounce', 'complaint', 'manual', 'unsubscribe', 'policy', 'invalid_recipient') NOT NULL,
+    source VARCHAR(120) NOT NULL DEFAULT 'manual',
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    notes VARCHAR(500) NULL,
+    suppressed_by BIGINT UNSIGNED NULL,
+    released_by BIGINT UNSIGNED NULL,
+    suppressed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    released_at DATETIME NULL,
+    metadata_json JSON NULL,
+    INDEX idx_suppression_lookup (email_hash, scope, active),
+    INDEX idx_suppression_reason (reason, active),
+    CONSTRAINT fk_suppression_suppressed_by FOREIGN KEY (suppressed_by) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_suppression_released_by FOREIGN KEY (released_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
 CREATE TABLE delivery_events (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     mail_queue_id BIGINT UNSIGNED NOT NULL,
-    event_type ENUM('queued', 'processing', 'sent', 'retry_scheduled', 'failed', 'bounce') NOT NULL,
+    event_type ENUM('queued', 'processing', 'sent', 'retry_scheduled', 'failed', 'bounce', 'suppressed') NOT NULL,
     provider_message_id VARCHAR(255) NULL,
     metadata_json JSON NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -121,6 +121,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
+- Check hashed suppression records before sending to hard-bounced, complained, or manually held recipients.
 - Run background delivery through CRON or a process supervisor.
 
 ## CRON Scheduling
