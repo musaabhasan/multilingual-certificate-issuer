@@ -47,9 +47,10 @@ flowchart LR
 5. System validates the CSV and creates recipient rows.
 6. Renderer generates one PDF/A file per recipient.
 7. Operator selects email template, SMTP profile, schedule, and throttling speed.
-8. Queue worker sends messages at the configured interval.
-9. Recipients can verify certificate metadata through the verification portal.
-10. Audit log records the full chain.
+8. System checks email template variables against recipient data before queue release.
+9. Queue worker sends messages at the configured interval.
+10. Recipients can verify certificate metadata through the verification portal.
+11. Audit log records the full chain.
 
 ## Design Decisions
 

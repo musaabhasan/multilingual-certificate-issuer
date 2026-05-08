@@ -17,7 +17,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
-| Email templates | Dynamic message content | `{{tag}}` rendering for bilingual recipient and certificate fields |
+| Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
 | Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
 | Deployment readiness | Production hosting guidance | Self-hosted deployment, MySQL encryption guidance, private storage controls |
