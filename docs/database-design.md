@@ -25,6 +25,7 @@ This supports Arabic, English, symbols, and mixed-direction text. Application re
 | `recipients` | Recipient rows with normalized fields and full JSON payload |
 | `certificate_jobs` | Rendering state, revocation state, PDF path, hash, and verification token per recipient |
 | `certificate_verification_events` | Public verification attempts and lookup audit data |
+| Private hash manifest files | Batch-level evidence files that preserve certificate numbers, recipient identifiers, PDF SHA-256 hashes, and a manifest SHA-256 hash |
 | `email_templates` | Bilingual email bodies and dynamic tags |
 | `mail_queue` | Scheduled, throttled, retryable email delivery |
 | `delivery_events` | Queue lifecycle, retry, sent, failed, and bounce events |

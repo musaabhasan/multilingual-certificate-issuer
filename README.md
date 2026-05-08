@@ -17,6 +17,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
+| Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
 | Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
@@ -49,6 +50,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
+| [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 
 ## Quick Start
 
@@ -142,6 +144,7 @@ Recommended production additions:
 - Public response that confirms validity without exposing private CSV data.
 - Administrative report of verification lookups.
 - Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
+- Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 
 ## Project Phases
 
