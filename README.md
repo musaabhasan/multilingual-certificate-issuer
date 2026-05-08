@@ -16,6 +16,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
+| Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
@@ -50,6 +51,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
+| [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
@@ -81,6 +83,12 @@ Run PHP syntax checks:
 
 ```bash
 composer run lint
+```
+
+Run the batch release readiness demo:
+
+```bash
+php bin/batch-release-gate-demo.php examples/batch-release-readiness.json
 ```
 
 ## Certificate Template Model
