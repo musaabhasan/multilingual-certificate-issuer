@@ -10,7 +10,7 @@
 | Unauthorized certificate generation | Role-based access, template approval, audit logging |
 | Certificate tampering | Private storage, PDF hash logging, optional future digital signatures |
 | Verification endpoint abuse | Hashed tokens, lookup logging, rate limiting, safe metadata responses |
-| Bulk email abuse | Queue throttling, role separation, SMTP profile approval |
+| Bulk email abuse | Queue throttling, suppression list checks, role separation, SMTP profile approval |
 | Unapproved storage or processing location | Approved hosting policy, controlled backups, no third-party storage by default |
 | Public exposure of generated PDFs | Storage outside web root, signed download routes only |
 
@@ -59,6 +59,7 @@ At minimum, log:
 - PDF generation,
 - queue schedule, pause, resume,
 - message sent, failed, retried,
+- address suppressed or released from suppression,
 - certificate verification lookups,
 - administrator user changes.
 

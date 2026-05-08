@@ -60,6 +60,29 @@ Track failed delivery with structured reason categories.
 | Attachment rejection | PDF blocked, size limit exceeded | Review PDF size, attachment policy, and recipient domain constraints. |
 | Policy rejection | Recipient domain blocks bulk or automated mail | Pause affected domain sends and review deliverability guidance. |
 
+Suppression should be applied before a queue row is sent, not only after a
+mailer exception. A suppressed row should keep its queue record, move to a
+`suppressed` status, write a `delivery_events` entry, and store the
+`suppression_reason` so operators can explain why delivery was skipped.
+
+## Suppression List Controls
+
+The suppression list protects recipients, sender reputation, and institutional
+trust. Store suppression records with a hashed email address and masked display
+value rather than keeping a plain-text address in the suppression table.
+
+| Control | Requirement |
+| --- | --- |
+| Hard bounce | Suppress the address after a permanent 5xx response or invalid mailbox signal. |
+| Complaint | Suppress immediately when a recipient reports unsolicited or incorrect certificate mail. |
+| Manual hold | Allow an operator to suppress an address during identity, duplicate, or eligibility review. |
+| Scoped suppression | Support global suppression and scoped suppression for a specific campaign, domain, or institution. |
+| Release workflow | Require an operator note and audit event before re-enabling a suppressed address. |
+| Privacy | Store `email_hash`, `email_mask`, reason, source, actor, and metadata without retaining the full address. |
+
+`src/Mail/SuppressionList.php` provides normalization, hashing, masking, lookup,
+suppression, and release helpers for future queue-worker integration.
+
 Recommended batch pause thresholds:
 
 - hard bounce rate greater than 5% after at least 100 attempts,

@@ -28,6 +28,7 @@ This supports Arabic, English, symbols, and mixed-direction text. Application re
 | Private hash manifest files | Batch-level evidence files that preserve certificate numbers, recipient identifiers, PDF SHA-256 hashes, and a manifest SHA-256 hash |
 | `email_templates` | Bilingual email bodies and dynamic tags |
 | `mail_queue` | Scheduled, throttled, retryable email delivery |
+| `email_suppressions` | Hashed recipient suppression records for hard bounces, complaints, manual holds, and policy blocks |
 | `delivery_events` | Queue lifecycle, retry, sent, failed, and bounce events |
 | `audit_log` | Administrative and system activity |
 
@@ -44,6 +45,7 @@ stateDiagram-v2
     PdfRendered --> Queued
     PdfRendered --> VerificationReady
     Queued --> Sent
+    Queued --> Suppressed
     Queued --> Failed
     Failed --> Queued: retry
 ```
@@ -59,6 +61,7 @@ Recommended defaults:
 | Generated PDFs | Retain for the certificate validity period or institutional policy |
 | Verification events | Retain for audit and abuse monitoring |
 | Delivery events | Retain for operational reporting and SMTP troubleshooting |
+| Suppression records | Retain while active and review periodically for scoped/manual releases |
 | Audit logs | Minimum 1 year; longer for regulated environments |
 | SMTP test logs | 30 to 90 days |
 
