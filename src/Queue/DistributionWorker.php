@@ -21,12 +21,10 @@ final class DistributionWorker
 
     public function runOnce(): int
     {
-        $item = $this->nextItem();
+        $item = $this->claimNextItem();
         if ($item === null) {
             return 0;
         }
-
-        $this->markProcessing((int) $item['id']);
 
         try {
             $profile = $this->smtpProfile((int) $item['smtp_profile_id']);
@@ -47,7 +45,30 @@ final class DistributionWorker
         }
     }
 
-    private function nextItem(): ?array
+    private function claimNextItem(): ?array
+    {
+        $this->db->beginTransaction();
+
+        try {
+            $item = $this->nextItemForUpdate();
+            if ($item === null) {
+                $this->db->commit();
+                return null;
+            }
+
+            $this->markProcessing((int) $item['id']);
+            $this->db->commit();
+            return $item;
+        } catch (Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function nextItemForUpdate(): ?array
     {
         $statement = $this->db->query(
             "SELECT *
@@ -56,7 +77,8 @@ final class DistributionWorker
                AND scheduled_at <= UTC_TIMESTAMP()
                AND (next_attempt_at IS NULL OR next_attempt_at <= UTC_TIMESTAMP())
              ORDER BY scheduled_at ASC, id ASC
-             LIMIT 1"
+             LIMIT 1
+             FOR UPDATE"
         );
 
         $item = $statement->fetch();
