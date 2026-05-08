@@ -128,7 +128,7 @@ Example CRON entry for a queue worker every minute:
 * * * * * cd /var/www/certificate-issuer && php bin/queue-worker.php >> storage/logs/worker.log 2>&1
 ```
 
-Each queue item has `scheduled_at`, `attempts`, `next_attempt_at`, and `sent_at` fields. Delivery speed is controlled by `QUEUE_THROTTLE_SECONDS`.
+Each queue item has `scheduled_at`, `attempts`, `next_attempt_at`, `updated_at`, and `sent_at` fields. Delivery speed is controlled by `QUEUE_THROTTLE_SECONDS`. Jobs left in `processing` after a worker crash are recovered after `QUEUE_STALE_PROCESSING_MINUTES` minutes, then retried or marked failed according to the attempt counter.
 
 ## Verification Flow
 

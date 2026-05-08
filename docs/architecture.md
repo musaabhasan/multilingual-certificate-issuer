@@ -59,6 +59,7 @@ flowchart LR
 - Store SMTP passwords encrypted using sodium secretbox.
 - Keep the queue in MySQL for operational simplicity in small and mid-sized institutions.
 - Claim queue rows inside a database transaction with row-level locking to avoid duplicate sends when multiple workers run.
+- Recover stale `processing` rows with a configurable timeout so worker crashes do not permanently block scheduled delivery.
 - Use CRON or a process supervisor for scheduled delivery.
 - Make template layout data explicit JSON so it can be versioned and reviewed.
 - Store only hashed verification tokens so public validation links do not expose reusable secrets in the database.

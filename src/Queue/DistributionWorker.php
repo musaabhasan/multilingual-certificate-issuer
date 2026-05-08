@@ -7,6 +7,7 @@ namespace CertificateIssuer\Queue;
 use CertificateIssuer\Mail\CertificateMailer;
 use CertificateIssuer\Mail\SmtpProfile;
 use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
 use Throwable;
 
@@ -15,12 +16,15 @@ final class DistributionWorker
     public function __construct(
         private readonly PDO $db,
         private readonly CertificateMailer $mailer,
-        private readonly int $throttleSeconds
+        private readonly int $throttleSeconds,
+        private readonly int $staleProcessingMinutes = 30
     ) {
     }
 
     public function runOnce(): int
     {
+        $this->requeueStaleProcessingItems($this->staleProcessingMinutes);
+
         $item = $this->claimNextItem();
         if ($item === null) {
             return 0;
@@ -43,6 +47,27 @@ final class DistributionWorker
             $this->markFailed((int) $item['id'], $exception->getMessage());
             return 1;
         }
+    }
+
+    public function requeueStaleProcessingItems(int $olderThanMinutes = 30): int
+    {
+        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->modify(sprintf('-%d minutes', max(1, $olderThanMinutes)))
+            ->format('Y-m-d H:i:s');
+
+        $statement = $this->db->prepare(
+            "UPDATE mail_queue
+             SET status = CASE WHEN attempts >= 4 THEN 'failed' ELSE 'pending' END,
+                 attempts = attempts + 1,
+                 next_attempt_at = UTC_TIMESTAMP(),
+                 last_error = 'Worker heartbeat expired before delivery completion.',
+                 updated_at = UTC_TIMESTAMP()
+             WHERE status = 'processing'
+               AND updated_at < :cutoff"
+        );
+        $statement->execute(['cutoff' => $cutoff]);
+
+        return $statement->rowCount();
     }
 
     private function claimNextItem(): ?array

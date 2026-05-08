@@ -13,7 +13,8 @@ Env::load(__DIR__ . '/../.env');
 
 $once = in_array('--once', $argv, true);
 $throttle = (int) Env::get('QUEUE_THROTTLE_SECONDS', '60');
-$worker = new DistributionWorker(Connection::make(), new CertificateMailer(), $throttle);
+$staleProcessingMinutes = (int) Env::get('QUEUE_STALE_PROCESSING_MINUTES', '30');
+$worker = new DistributionWorker(Connection::make(), new CertificateMailer(), $throttle, $staleProcessingMinutes);
 
 do {
     $processed = $worker->runOnce();
