@@ -48,6 +48,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
+| [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
 
 ## Quick Start
 
@@ -140,6 +141,7 @@ Recommended production additions:
 - Rate limits on verification attempts.
 - Public response that confirms validity without exposing private CSV data.
 - Administrative report of verification lookups.
+- Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
 
 ## Project Phases
 

@@ -102,13 +102,17 @@ CREATE TABLE certificate_jobs (
     pdf_path VARCHAR(500) NULL,
     pdf_sha256 CHAR(64) NULL,
     verification_token_hash CHAR(64) NULL,
-    status ENUM('pending', 'rendering', 'rendered', 'failed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending', 'rendering', 'rendered', 'failed', 'revoked') NOT NULL DEFAULT 'pending',
     failure_reason TEXT NULL,
+    revocation_reason TEXT NULL,
+    revoked_by BIGINT UNSIGNED NULL,
+    revoked_at DATETIME NULL,
     rendered_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_job_recipient FOREIGN KEY (recipient_id) REFERENCES recipients(id) ON DELETE CASCADE,
-    CONSTRAINT fk_job_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id)
+    CONSTRAINT fk_job_template FOREIGN KEY (template_id) REFERENCES certificate_templates(id),
+    CONSTRAINT fk_job_revoked_by FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
 CREATE TABLE certificate_verification_events (

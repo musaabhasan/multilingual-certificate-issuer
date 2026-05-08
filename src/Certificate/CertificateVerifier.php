@@ -59,6 +59,25 @@ final class CertificateVerifier
         return $record;
     }
 
+    public function revoke(int $certificateJobId, string $reason, ?int $revokedBy = null): void
+    {
+        $statement = $this->db->prepare(
+            'UPDATE certificate_jobs
+             SET status = "revoked",
+                 revocation_reason = :reason,
+                 revoked_by = :revoked_by,
+                 revoked_at = UTC_TIMESTAMP(),
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = :id
+               AND status = "rendered"'
+        );
+        $statement->execute([
+            'id' => $certificateJobId,
+            'reason' => $reason,
+            'revoked_by' => $revokedBy,
+        ]);
+    }
+
     public function recordLookup(int $certificateJobId, bool $success): void
     {
         $statement = $this->db->prepare(
