@@ -15,6 +15,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
+| Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Email templates | Dynamic message content | `{{tag}}` rendering for bilingual recipient and certificate fields |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
@@ -46,6 +47,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Project Plan](docs/project-plan.md) | Four-phase implementation plan with acceptance criteria |
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
+| [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 
 ## Quick Start
 
@@ -114,6 +116,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Keep generated PDFs outside the public web root.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
+- Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
 - Run background delivery through CRON or a process supervisor.
 
 ## CRON Scheduling
