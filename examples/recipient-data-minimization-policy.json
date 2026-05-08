@@ -1,0 +1,65 @@
+[
+  {
+    "label": "approved professional development certificate import",
+    "csv_path": "recipients-ar-en.csv",
+    "policy": {
+      "purpose": "Render bilingual certificates, deliver messages, support verification, and retain audit evidence.",
+      "allowed_fields": [
+        "unique_identifier",
+        "email",
+        "name_en",
+        "name_ar",
+        "program_en",
+        "program_ar",
+        "issue_date"
+      ],
+      "required_fields": [
+        "unique_identifier",
+        "email",
+        "name_en",
+        "issue_date"
+      ],
+      "retention_days": 365,
+      "access_role": "certificate_operator",
+      "encrypted_at_rest": true,
+      "external_sharing": false,
+      "allow_raw_csv_download": false
+    }
+  },
+  {
+    "label": "over-collected registration export",
+    "headers": [
+      "unique_identifier",
+      "email",
+      "name_en",
+      "program_en",
+      "issue_date",
+      "phone",
+      "home_address",
+      "national_id",
+      "medical_notes",
+      "department"
+    ],
+    "policy": {
+      "purpose": "",
+      "allowed_fields": [
+        "unique_identifier",
+        "email",
+        "name_en",
+        "program_en",
+        "issue_date"
+      ],
+      "required_fields": [
+        "unique_identifier",
+        "email",
+        "name_en",
+        "issue_date"
+      ],
+      "retention_days": 1095,
+      "access_role": "",
+      "encrypted_at_rest": false,
+      "external_sharing": true,
+      "allow_raw_csv_download": true
+    }
+  }
+]

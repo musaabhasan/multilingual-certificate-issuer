@@ -7,6 +7,7 @@
 | Stolen administrator password | MFA, password rotation, session timeout, audit logs |
 | SMTP credential leakage | Sodium encryption, `.env` key separation, restricted database access |
 | CSV injection or malformed data | Header validation, row limits, formula-prefix neutralization before export |
+| Over-collected recipient personal data | Approved data dictionary, recipient data minimization audit, retention review |
 | Unauthorized certificate generation | Role-based access, template approval, audit logging |
 | Certificate tampering | Private storage, PDF hash logging, optional future digital signatures |
 | Verification endpoint abuse | Hashed tokens, lookup logging, rate limiting, safe metadata responses |
@@ -56,6 +57,7 @@ At minimum, log:
 - SMTP profile create/update/test,
 - template create/update/approve/retire,
 - CSV upload and mapping,
+- recipient data minimization audit output,
 - PDF generation,
 - queue schedule, pause, resume,
 - message sent, failed, retried,
@@ -68,6 +70,8 @@ At minimum, log:
 - Restrict background uploads to PNG/JPG by MIME type and extension.
 - Limit upload size.
 - Reject CSV files with empty or duplicate header names before mapping.
+- Compare CSV fields with the approved data dictionary before processing.
+- Remove high-risk fields that are not required for rendering, delivery, verification, or audit evidence.
 - Apply a configured recipient row limit to reduce accidental oversized imports.
 - Store uploads outside the public root.
 - Randomize storage names.

@@ -21,6 +21,7 @@
   },
   "scripts": {
     "lint": "php bin/lint.php",
+    "recipient-data-audit": "php bin/recipient-data-audit-demo.php",
     "worker": "php bin/queue-worker.php"
   },
   "config": {

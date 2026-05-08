@@ -16,6 +16,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
+| Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
@@ -51,6 +52,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
+| [Recipient Data Minimization Audit](docs/recipient-data-minimization-audit.md) | Pre-processing privacy gate for CSV fields, retention, access control, encryption, and external sharing |
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
@@ -91,6 +93,12 @@ Run the batch release readiness demo:
 php bin/batch-release-gate-demo.php examples/batch-release-readiness.json
 ```
 
+Run the recipient data minimization audit:
+
+```bash
+php bin/recipient-data-audit-demo.php examples/recipient-data-minimization-policy.json
+```
+
 ## Certificate Template Model
 
 Templates are stored as JSON-backed rows and rendered into PDF/A. Each text element declares a CSV source column, position, font size, alignment, color, and direction.
@@ -127,6 +135,8 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Rotate passwords every 90 days.
 - Validate uploaded CSV, image, and font files by MIME type and size.
 - Reject CSV files with empty headers, duplicate headers, or excessive recipient row counts.
+- Audit recipient CSV fields against an approved data dictionary before generation or delivery.
+- Confirm retention, access role, storage encryption, and sharing evidence before processing recipient data.
 - Keep generated PDFs outside the public web root.
 - Issue verification receipts with only safe public metadata and canonical receipt hashes.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
@@ -158,6 +168,7 @@ Recommended production additions:
 - Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
+- Recipient data minimization audit output attached to the batch approval record.
 
 ## Project Phases
 
@@ -179,6 +190,8 @@ The repository is designed for institutions that need controlled digital credent
 - backup and restore testing,
 - hosting and privacy review,
 - privacy and retention review.
+
+Use the recipient data minimization audit before production imports to catch over-collected identifiers, sensitive fields, weak retention rules, and unapproved sharing paths.
 
 ## License
 
