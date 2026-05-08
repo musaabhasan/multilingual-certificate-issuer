@@ -23,7 +23,7 @@ This supports Arabic, English, symbols, and mixed-direction text. Application re
 | `certificate_template_versions` | Version history for layout changes |
 | `recipient_batches` | CSV upload batches linked to a template |
 | `recipients` | Recipient rows with normalized fields and full JSON payload |
-| `certificate_jobs` | Rendering state and PDF path per recipient |
+| `certificate_jobs` | Rendering state, revocation state, PDF path, hash, and verification token per recipient |
 | `certificate_verification_events` | Public verification attempts and lookup audit data |
 | `email_templates` | Bilingual email bodies and dynamic tags |
 | `mail_queue` | Scheduled, throttled, retryable email delivery |

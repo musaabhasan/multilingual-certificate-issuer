@@ -63,6 +63,7 @@ flowchart LR
 - Use CRON or a process supervisor for scheduled delivery.
 - Make template layout data explicit JSON so it can be versioned and reviewed.
 - Store only hashed verification tokens so public validation links do not expose reusable secrets in the database.
+- Treat revocation as a certificate lifecycle state so withdrawn credentials stop validating without deleting issuance evidence.
 
 ## Future Extensions
 
