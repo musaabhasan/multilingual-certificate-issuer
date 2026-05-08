@@ -7,6 +7,7 @@ Digital certificates need a verification lifecycle, not only a PDF generation wo
 - Public verification must confirm only safe metadata: certificate number, recipient display name, template name, rendered timestamp, and PDF SHA-256 hash.
 - Verification tokens must be stored as hashes, not reusable plaintext values.
 - Generated PDFs should stay outside the public web root.
+- Batch-level hash manifests should be retained so PDF hashes can be checked independently of the application database.
 - The verification page should not reveal private CSV fields, email addresses, internal batch IDs, administrator names, or delivery details.
 - Every lookup should be logged for abuse detection and certificate-support investigations.
 - Repeated failed lookups should be rate-limited and monitored for enumeration attempts.
@@ -75,6 +76,7 @@ Retain:
 
 - original certificate number,
 - PDF SHA-256 hash,
+- batch manifest SHA-256 hash,
 - verification token hash,
 - rendered timestamp,
 - revocation timestamp,
@@ -82,6 +84,8 @@ Retain:
 - reason category and free-text rationale,
 - replacement certificate number where applicable,
 - verification lookup history.
+
+Use [Tamper-Evident Hash Manifest](hash-manifest.md) for the batch-level evidence artifact that links certificate numbers, recipient identifiers, PDF hashes, and the manifest hash.
 
 ## Abuse Monitoring
 
