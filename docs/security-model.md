@@ -66,6 +66,8 @@ At minimum, log:
 
 - Restrict background uploads to PNG/JPG by MIME type and extension.
 - Limit upload size.
+- Reject CSV files with empty or duplicate header names before mapping.
+- Apply a configured recipient row limit to reduce accidental oversized imports.
 - Store uploads outside the public root.
 - Randomize storage names.
 - Strip or ignore original file paths.

@@ -8,7 +8,10 @@ use InvalidArgumentException;
 
 final class CsvImporter
 {
-    public function __construct(private readonly ?UploadValidator $uploadValidator = null)
+    public function __construct(
+        private readonly ?UploadValidator $uploadValidator = null,
+        private readonly int $maxRows = 10_000
+    )
     {
     }
 
@@ -28,12 +31,18 @@ final class CsvImporter
             throw new InvalidArgumentException('CSV file must include a header row.');
         }
 
-        $headers = array_map(static fn ($header) => trim((string) $header), $headers);
+        $headers = array_map(static fn ($header): string => self::normalizeHeader((string) $header), $headers);
+        $this->assertValidHeaders($headers);
         $rows = [];
 
         while (($row = fgetcsv($handle)) !== false) {
             if ($row === [null]) {
                 continue;
+            }
+
+            if (count($rows) >= $this->maxRows) {
+                fclose($handle);
+                throw new InvalidArgumentException('CSV file exceeds the configured recipient row limit.');
             }
 
             $record = [];
@@ -62,5 +71,25 @@ final class CsvImporter
         $missing = array_values(array_diff($requiredColumns, $available));
 
         return array_map(static fn (string $column): string => 'Missing required CSV column: ' . $column, $missing);
+    }
+
+    /**
+     * @param array<int, string> $headers
+     */
+    private function assertValidHeaders(array $headers): void
+    {
+        if (in_array('', $headers, true)) {
+            throw new InvalidArgumentException('CSV header row must not contain empty columns.');
+        }
+
+        $duplicates = array_keys(array_filter(array_count_values($headers), static fn (int $count): bool => $count > 1));
+        if ($duplicates !== []) {
+            throw new InvalidArgumentException('CSV header row contains duplicate columns: ' . implode(', ', $duplicates));
+        }
+    }
+
+    private static function normalizeHeader(string $header): string
+    {
+        return trim(ltrim($header, "\xEF\xBB\xBF"));
     }
 }
