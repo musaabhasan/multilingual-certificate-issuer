@@ -62,6 +62,12 @@ stdout_logfile=/var/www/certificate-issuer/storage/logs/worker.log
 
 The application key is required to decrypt SMTP credentials. Store it separately from database backups.
 
+## Queue Concurrency
+
+The queue worker claims one ready message inside a database transaction using row-level locking. This allows a supervisor or CRON deployment to run more than one worker process without two workers sending the same queue item.
+
+Keep the throttle aligned with the number of workers. For example, two workers with a 60-second throttle can send up to two messages per minute.
+
 ## Go-Live Checklist
 
 - HTTPS configured.

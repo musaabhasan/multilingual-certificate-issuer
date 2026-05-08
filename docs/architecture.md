@@ -58,6 +58,7 @@ flowchart LR
 - Treat generated PDFs as private files, never public static assets.
 - Store SMTP passwords encrypted using sodium secretbox.
 - Keep the queue in MySQL for operational simplicity in small and mid-sized institutions.
+- Claim queue rows inside a database transaction with row-level locking to avoid duplicate sends when multiple workers run.
 - Use CRON or a process supervisor for scheduled delivery.
 - Make template layout data explicit JSON so it can be versioned and reviewed.
 - Store only hashed verification tokens so public validation links do not expose reusable secrets in the database.
