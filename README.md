@@ -18,6 +18,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
+| Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
 | Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
@@ -51,6 +52,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
+| [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 
 ## Quick Start
 
@@ -118,6 +120,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Validate uploaded CSV, image, and font files by MIME type and size.
 - Reject CSV files with empty headers, duplicate headers, or excessive recipient row counts.
 - Keep generated PDFs outside the public web root.
+- Issue verification receipts with only safe public metadata and canonical receipt hashes.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
@@ -146,6 +149,7 @@ Recommended production additions:
 - Administrative report of verification lookups.
 - Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
+- Verification receipt export for support cases, recipient disputes, and audit sampling.
 
 ## Project Phases
 

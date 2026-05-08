@@ -8,6 +8,7 @@ Digital certificates need a verification lifecycle, not only a PDF generation wo
 - Verification tokens must be stored as hashes, not reusable plaintext values.
 - Generated PDFs should stay outside the public web root.
 - Batch-level hash manifests should be retained so PDF hashes can be checked independently of the application database.
+- Verification receipts should preserve the safe public lookup outcome and a receipt-level hash for support and audit evidence.
 - The verification page should not reveal private CSV fields, email addresses, internal batch IDs, administrator names, or delivery details.
 - Every lookup should be logged for abuse detection and certificate-support investigations.
 - Repeated failed lookups should be rate-limited and monitored for enumeration attempts.
@@ -69,6 +70,20 @@ Operational rules:
 | Token mismatch | Return generic invalid response and log failed lookup |
 | Revoked certificate | Return revoked status only if institutional policy permits public disclosure |
 | Excessive attempts | Return rate-limit response without revealing which field failed |
+
+## Verification Receipts
+
+Generate a receipt after the verifier decides whether a lookup is valid, revoked, invalid, or rate-limited. The receipt should contain safe public metadata, the verification timestamp, certificate and manifest hashes when available, and a `receipt_sha256` value calculated from canonical JSON.
+
+Use receipts when:
+
+- a recipient needs evidence that a certificate was valid at a point in time,
+- a support team investigates a disputed certificate,
+- a revocation decision needs a public but privacy-preserving record,
+- an auditor samples verification outcomes against batch hash manifests,
+- UAT testers need deterministic evidence for Arabic and English certificate checks.
+
+See [Verification Receipt Evidence](verification-receipt.md) for the JSON artifact model and operational rules.
 
 ## Administrative Evidence
 
