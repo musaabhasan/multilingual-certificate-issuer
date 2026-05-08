@@ -1,0 +1,46 @@
+{
+  "certificates": [
+    {
+      "certificate_number": "CERT-2026-001",
+      "status": "revoked",
+      "rendered_at": "2026-05-05T10:00:00Z",
+      "revoked_at": "2026-05-07T12:30:00Z",
+      "revoked_by": "credential-admin",
+      "revocation_reason": "recipient data error - corrected spelling",
+      "replacement_certificate_number": "CERT-2026-004",
+      "pdf_sha256": "6c4f0f5a6f3b4a65b4e8c18f10af8df9b4e1d691a4a61fc5d0c1df1e7a214f90",
+      "manifest_sha256": "7dd4729127c79a4a826a68236c15a86c8615c492a9029e4a1f1d9c77282a84f0",
+      "token_rotated": true,
+      "recipient_notified": true,
+      "evidence_reference": "revocation-approval-001"
+    },
+    {
+      "certificate_number": "CERT-2026-004",
+      "status": "rendered",
+      "rendered_at": "2026-05-07T13:00:00Z",
+      "pdf_sha256": "9b054e103d0d3c4055aa6ec6725f3d6f6879d8db07f4d5b934f740056af0db4f",
+      "manifest_sha256": "0a47221f5e6f0f6afab0fd35169d70f8dbf8ad6080f4aa122ec47882d7505e62"
+    },
+    {
+      "certificate_number": "CERT-2026-002",
+      "status": "revoked",
+      "rendered_at": "2026-05-06T09:00:00Z",
+      "revoked_at": "2026-05-05T09:00:00Z",
+      "revoked_by": "",
+      "revocation_reason": "duplicate issuance",
+      "replacement_certificate_number": "CERT-2026-999",
+      "pdf_sha256": "",
+      "manifest_sha256": "",
+      "token_rotated": false,
+      "recipient_notified": false,
+      "evidence_reference": ""
+    },
+    {
+      "certificate_number": "CERT-2026-002",
+      "status": "rendered",
+      "rendered_at": "2026-05-06T09:15:00Z",
+      "pdf_sha256": "3ed9f78291088fe47f710cd22f7a2be640c54fd7f9a6d4f271f924b988f7bcae",
+      "manifest_sha256": "2d8fd8d090c1b3d8f0436b5948e98690c85e092f405ab9fd9f66ef01807a9854"
+    }
+  ]
+}

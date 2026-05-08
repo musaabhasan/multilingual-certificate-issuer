@@ -20,6 +20,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
+| Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
@@ -57,6 +58,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Recipient Collision Audit](docs/recipient-collision-audit.md) | Pre-render integrity gate for duplicate identifiers, certificate numbers, repeated emails, and ambiguous recipient rows |
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
+| [Revocation Ledger Audit](docs/revocation-ledger-audit.md) | Executable checks for revoked certificates, replacement links, timestamp order, preserved hashes, token handling, and notification evidence |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 
@@ -107,6 +109,12 @@ Run the recipient collision audit:
 php bin/recipient-collision-audit-demo.php examples/recipient-collision-sample.csv
 ```
 
+Run the revocation ledger audit:
+
+```bash
+php bin/revocation-ledger-audit-demo.php examples/revocation-ledger-sample.json
+```
+
 ## Certificate Template Model
 
 Templates are stored as JSON-backed rows and rendered into PDF/A. Each text element declares a CSV source column, position, font size, alignment, color, and direction.
@@ -148,6 +156,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Confirm retention, access role, storage encryption, and sharing evidence before processing recipient data.
 - Keep generated PDFs outside the public web root.
 - Issue verification receipts with only safe public metadata and canonical receipt hashes.
+- Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
@@ -175,6 +184,7 @@ Recommended production additions:
 - Public response that confirms validity without exposing private CSV data.
 - Administrative report of verification lookups.
 - Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
+- Revocation ledger audit before publishing replacement or withdrawal evidence.
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Recipient data minimization audit output attached to the batch approval record.
