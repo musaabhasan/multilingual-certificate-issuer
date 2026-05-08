@@ -68,6 +68,8 @@ The queue worker claims one ready message inside a database transaction using ro
 
 Keep the throttle aligned with the number of workers. For example, two workers with a 60-second throttle can send up to two messages per minute.
 
+Set `QUEUE_STALE_PROCESSING_MINUTES` to the longest expected SMTP delivery window plus operational margin. If a worker exits after claiming a job but before recording the send result, the next worker run moves stale `processing` rows back to `pending` or to `failed` when the retry limit has been reached.
+
 ## Go-Live Checklist
 
 - HTTPS configured.
