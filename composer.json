@@ -24,6 +24,7 @@
     "recipient-collision-audit": "php bin/recipient-collision-audit-demo.php",
     "recipient-data-audit": "php bin/recipient-data-audit-demo.php",
     "revocation-ledger-audit": "php bin/revocation-ledger-audit-demo.php",
+    "template-asset-audit": "php bin/template-asset-audit-demo.php",
     "worker": "php bin/queue-worker.php"
   },
   "config": {

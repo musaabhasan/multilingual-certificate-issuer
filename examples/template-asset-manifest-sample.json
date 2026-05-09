@@ -1,0 +1,73 @@
+{
+  "template_id": "professional-development-bilingual",
+  "template_version": "2026.05",
+  "approved_by": "credentialing-office",
+  "approved_at": "2026-05-01T09:00:00Z",
+  "requires_arabic": true,
+  "assets": [
+    {
+      "asset_id": "background-main",
+      "type": "background",
+      "filename": "backgrounds/professional-development.png",
+      "expected_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observed_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mime_type": "image/png",
+      "required": true,
+      "embedded": true,
+      "dpi": 300,
+      "width_px": 3508,
+      "height_px": 2480,
+      "license_reference": "internal-design-approval-2026-05",
+      "rtl_capable": false,
+      "review_status": "approved"
+    },
+    {
+      "asset_id": "arabic-english-font",
+      "type": "font",
+      "filename": "fonts/NotoNaskhArabic-Regular.ttf",
+      "expected_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "observed_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mime_type": "font/ttf",
+      "required": true,
+      "embedded": true,
+      "dpi": 0,
+      "width_px": 0,
+      "height_px": 0,
+      "license_reference": "font-license-review-2026-05",
+      "rtl_capable": true,
+      "review_status": "approved"
+    },
+    {
+      "asset_id": "signature-director",
+      "type": "signature",
+      "filename": "signatures/director.png",
+      "expected_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "observed_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "mime_type": "image/png",
+      "required": true,
+      "embedded": true,
+      "dpi": 220,
+      "width_px": 800,
+      "height_px": 240,
+      "license_reference": "",
+      "rtl_capable": false,
+      "review_status": "pending"
+    },
+    {
+      "asset_id": "verification-qr-overlay",
+      "type": "qr_overlay",
+      "filename": "overlays/qr-frame.png",
+      "expected_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "observed_sha256": "",
+      "mime_type": "image/png",
+      "required": true,
+      "embedded": false,
+      "dpi": 300,
+      "width_px": 512,
+      "height_px": 512,
+      "license_reference": "internal-design-approval-2026-05",
+      "rtl_capable": false,
+      "review_status": "approved_with_controls"
+    }
+  ]
+}

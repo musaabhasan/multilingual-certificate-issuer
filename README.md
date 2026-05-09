@@ -19,6 +19,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
+| Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
@@ -57,6 +58,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Recipient Data Minimization Audit](docs/recipient-data-minimization-audit.md) | Pre-processing privacy gate for CSV fields, retention, access control, encryption, and external sharing |
 | [Recipient Collision Audit](docs/recipient-collision-audit.md) | Pre-render integrity gate for duplicate identifiers, certificate numbers, repeated emails, and ambiguous recipient rows |
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
+| [Template Asset Integrity Audit](docs/template-asset-integrity-audit.md) | Pre-render manifest checks for asset hashes, embedding, DPI, licenses, approval state, and Arabic font readiness |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
 | [Revocation Ledger Audit](docs/revocation-ledger-audit.md) | Executable checks for revoked certificates, replacement links, timestamp order, preserved hashes, token handling, and notification evidence |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
@@ -113,6 +115,12 @@ Run the revocation ledger audit:
 
 ```bash
 php bin/revocation-ledger-audit-demo.php examples/revocation-ledger-sample.json
+```
+
+Run the template asset integrity audit:
+
+```bash
+php bin/template-asset-audit-demo.php examples/template-asset-manifest-sample.json
 ```
 
 ## Certificate Template Model
