@@ -23,6 +23,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
 | Verification token rotation | Verification-link lifecycle control | Scheduled and incident-driven rotation for lookup tokens, QR secrets, receipts, support references, and audit logs |
+| Verification abuse response | Public lookup protection | Response playbook for token guessing, scraping, enumeration, exposed QR links, suspicious support cases, and revoked-certificate probing |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Batch evidence retention | Issuance evidence lifecycle | Retention, redaction, deletion, legal hold, and ownership rules for CSV files, PDFs, manifests, queues, receipts, revocations, and audit logs |
@@ -71,6 +72,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
 | [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
 | [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
+| [Public Verification Abuse Response Playbook](docs/verification-abuse-response-playbook.md) | Response workflow for lookup spikes, token guessing, scraping, enumeration, exposed QR links, support-case abuse, containment, communications, and recovery |
 
 ## Quick Start
 
@@ -212,6 +214,7 @@ Recommended production additions:
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
 - Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
 - Support case redaction guide for verification receipts, delivery disputes, corrections, revocations, and vendor support tickets.
+- Public verification abuse response playbook for lookup spikes, token guessing, scraping, exposed QR links, and recovery evidence.
 - Recipient data minimization audit output attached to the batch approval record.
 - Recipient collision audit output attached to the batch approval record.
 
