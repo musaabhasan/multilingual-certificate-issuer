@@ -25,6 +25,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
+| Verification QR accessibility | Public lookup usability | QR scanning, visible fallback text, accessibility, revocation states, token rotation, and support evidence checks |
 | Verification token rotation | Verification-link lifecycle control | Scheduled and incident-driven rotation for lookup tokens, QR secrets, receipts, support references, and audit logs |
 | Verification abuse response | Public lookup protection | Response playbook for token guessing, scraping, enumeration, exposed QR links, suspicious support cases, and revoked-certificate probing |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
@@ -71,6 +72,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
 | [Template Asset Integrity Audit](docs/template-asset-integrity-audit.md) | Pre-render manifest checks for asset hashes, embedding, DPI, licenses, approval state, and Arabic font readiness |
 | [Verification And Revocation Controls](docs/verification-revocation.md) | Public verification, QR links, hash evidence, revocation workflow, and abuse monitoring |
+| [Verification QR Accessibility Workflow](docs/verification-qr-accessibility-workflow.md) | QR and fallback verification release checks for print, mobile, accessibility, privacy, revocation, token rotation, and support evidence |
 | [Revocation Ledger Audit](docs/revocation-ledger-audit.md) | Executable checks for revoked certificates, replacement links, timestamp order, preserved hashes, token handling, and notification evidence |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
