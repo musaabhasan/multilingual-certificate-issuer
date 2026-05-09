@@ -22,6 +22,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
+| Verification token rotation | Verification-link lifecycle control | Scheduled and incident-driven rotation for lookup tokens, QR secrets, receipts, support references, and audit logs |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
@@ -65,6 +66,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Revocation Ledger Audit](docs/revocation-ledger-audit.md) | Executable checks for revoked certificates, replacement links, timestamp order, preserved hashes, token handling, and notification evidence |
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
+| [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
 
 ## Quick Start
 
@@ -203,6 +205,7 @@ Recommended production additions:
 - Revocation ledger audit before publishing replacement or withdrawal evidence.
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
+- Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
 - Recipient data minimization audit output attached to the batch approval record.
 - Recipient collision audit output attached to the batch approval record.
 
