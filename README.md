@@ -16,6 +16,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
+| SMTP alignment audit | Sender-domain release gate | From-domain alignment, SPF, DKIM, DMARC, return-path, bounce/complaint handling, TLS, approval, and throttle checks |
 | Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
@@ -55,6 +56,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
+| [SMTP Domain Alignment Audit](docs/smtp-domain-alignment-audit.md) | Sender-domain release checks for SPF, DKIM, DMARC, return-path, TLS, bounce handling, complaints, approval, and throttle |
 | [Recipient Data Minimization Audit](docs/recipient-data-minimization-audit.md) | Pre-processing privacy gate for CSV fields, retention, access control, encryption, and external sharing |
 | [Recipient Collision Audit](docs/recipient-collision-audit.md) | Pre-render integrity gate for duplicate identifiers, certificate numbers, repeated emails, and ambiguous recipient rows |
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
@@ -121,6 +123,12 @@ Run the template asset integrity audit:
 
 ```bash
 php bin/template-asset-audit-demo.php examples/template-asset-manifest-sample.json
+```
+
+Run the SMTP domain alignment audit:
+
+```bash
+php bin/smtp-domain-alignment-audit-demo.php examples/smtp-domain-alignment-sample.json
 ```
 
 ## Certificate Template Model

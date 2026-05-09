@@ -1,0 +1,36 @@
+{
+  "smtp_profiles": [
+    {
+      "profile_id": "institutional-primary",
+      "from_domain": "certificates.example.edu",
+      "approved_sending_domain": "certificates.example.edu",
+      "spf_aligned": true,
+      "dkim_configured": true,
+      "dkim_selector": "cert-2026",
+      "dmarc_policy": "reject",
+      "return_path_aligned": true,
+      "bounce_handler_enabled": true,
+      "complaint_handler_enabled": true,
+      "tls_required": true,
+      "sender_approval_status": "approved",
+      "max_messages_per_minute": 30,
+      "evidence_reference": "SMTP-APPROVAL-2026-001"
+    },
+    {
+      "profile_id": "legacy-events",
+      "from_domain": "events.example.com",
+      "approved_sending_domain": "certificates.example.edu",
+      "spf_aligned": false,
+      "dkim_configured": false,
+      "dkim_selector": "",
+      "dmarc_policy": "none",
+      "return_path_aligned": false,
+      "bounce_handler_enabled": false,
+      "complaint_handler_enabled": false,
+      "tls_required": false,
+      "sender_approval_status": "draft",
+      "max_messages_per_minute": 250,
+      "evidence_reference": ""
+    }
+  ]
+}
