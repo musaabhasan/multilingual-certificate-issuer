@@ -32,6 +32,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Batch evidence retention | Issuance evidence lifecycle | Retention, redaction, deletion, legal hold, and ownership rules for CSV files, PDFs, manifests, queues, receipts, revocations, and audit logs |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
+| Delivery proof reconciliation | Batch closure and dispute evidence | Reconciles PDF hashes, queue rows, SMTP message IDs, bounces, suppression, verification receipts, support cases, and reissue decisions |
 | Support case redaction | Safe evidence sharing | Redaction rules for verification tickets, delivery disputes, corrections, revocations, vendor support, and audit samples |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
@@ -78,6 +79,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 | [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
 | [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
+| [Certificate Delivery Proof Reconciliation Workflow](docs/certificate-delivery-proof-reconciliation.md) | Batch closure workflow for reconciling PDF hashes, queue state, SMTP message IDs, bounces, suppression, verification receipts, support disputes, and reissue evidence |
 | [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
 | [Public Verification Abuse Response Playbook](docs/verification-abuse-response-playbook.md) | Response workflow for lookup spikes, token guessing, scraping, enumeration, exposed QR links, support-case abuse, containment, communications, and recovery |
 | [Certificate Correction And Reissue Workflow](docs/certificate-correction-reissue-workflow.md) | Controlled workflow for certificate corrections, re-rendering, hash changes, revocation or supersession decisions, verification-token impact, delivery, and audit closure |
@@ -194,6 +196,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Confirm retention, access role, storage encryption, and sharing evidence before processing recipient data.
 - Keep generated PDFs outside the public web root.
 - Issue verification receipts with only safe public metadata and canonical receipt hashes.
+- Reconcile certificate hashes, queue records, SMTP events, bounces, suppression entries, and support disputes before batch closure.
 - Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
@@ -228,6 +231,7 @@ Recommended production additions:
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
 - Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
+- Certificate delivery proof reconciliation for batch closure, delivery disputes, resend decisions, and reissue evidence.
 - Support case redaction guide for verification receipts, delivery disputes, corrections, revocations, and vendor support tickets.
 - Public verification abuse response playbook for lookup spikes, token guessing, scraping, exposed QR links, and recovery evidence.
 - Certificate correction and reissue workflow for recipient disputes, data corrections, re-rendering, hash-manifest changes, replacement delivery, and audit closure.
