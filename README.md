@@ -19,6 +19,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | SMTP alignment audit | Sender-domain release gate | From-domain alignment, SPF, DKIM, DMARC, return-path, bounce/complaint handling, TLS, approval, and throttle checks |
 | Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
+| Correction and reissue | Controlled certificate replacement | Workflow for correction intake, severity classification, source-of-truth checks, re-rendering, hash changes, revocation or supersession, token rotation, and delivery |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
@@ -73,6 +74,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
 | [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
 | [Public Verification Abuse Response Playbook](docs/verification-abuse-response-playbook.md) | Response workflow for lookup spikes, token guessing, scraping, enumeration, exposed QR links, support-case abuse, containment, communications, and recovery |
+| [Certificate Correction And Reissue Workflow](docs/certificate-correction-reissue-workflow.md) | Controlled workflow for certificate corrections, re-rendering, hash changes, revocation or supersession decisions, verification-token impact, delivery, and audit closure |
 
 ## Quick Start
 
@@ -215,6 +217,7 @@ Recommended production additions:
 - Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
 - Support case redaction guide for verification receipts, delivery disputes, corrections, revocations, and vendor support tickets.
 - Public verification abuse response playbook for lookup spikes, token guessing, scraping, exposed QR links, and recovery evidence.
+- Certificate correction and reissue workflow for recipient disputes, data corrections, re-rendering, hash-manifest changes, replacement delivery, and audit closure.
 - Recipient data minimization audit output attached to the batch approval record.
 - Recipient collision audit output attached to the batch approval record.
 
