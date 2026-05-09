@@ -27,6 +27,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Batch evidence retention | Issuance evidence lifecycle | Retention, redaction, deletion, legal hold, and ownership rules for CSV files, PDFs, manifests, queues, receipts, revocations, and audit logs |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
+| Support case redaction | Safe evidence sharing | Redaction rules for verification tickets, delivery disputes, corrections, revocations, vendor support, and audit samples |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
 | Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
@@ -69,6 +70,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 | [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
 | [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
+| [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
 
 ## Quick Start
 
@@ -209,6 +211,7 @@ Recommended production additions:
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
 - Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
+- Support case redaction guide for verification receipts, delivery disputes, corrections, revocations, and vendor support tickets.
 - Recipient data minimization audit output attached to the batch approval record.
 - Recipient collision audit output attached to the batch approval record.
 
