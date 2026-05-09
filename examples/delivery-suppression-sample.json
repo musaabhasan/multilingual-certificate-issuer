@@ -1,0 +1,81 @@
+{
+  "batch_id": "batch-2026-credentialing-042",
+  "release_status": "approved_with_controls",
+  "suppression_policy": {
+    "hard_bounce_suppresses": true,
+    "complaint_suppresses": true,
+    "manual_hold_blocks_delivery": true,
+    "suppression_checked_before_queueing": true,
+    "release_requires_approval": true,
+    "retry_limit": 3,
+    "retry_backoff_minutes": 60,
+    "max_hard_bounce_rate": 0.02,
+    "max_complaint_rate": 0.001
+  },
+  "delivery_metrics": {
+    "total_recipients": 1200,
+    "hard_bounces": 4,
+    "complaints": 0,
+    "suppressed_recipients": 7,
+    "retry_queue": 18,
+    "failed_after_retries": 1
+  },
+  "suppressions": [
+    {
+      "email_hash": "4f9c2c8dba1ee79a9f7f941872459755d2fe8f5bbdb982a5db428d82d5ce4971",
+      "email_mask": "a***@e***.edu",
+      "scope": "credentialing-2026",
+      "reason": "hard_bounce",
+      "source": "smtp_event",
+      "active": true,
+      "created_at": "2026-05-01T09:14:00Z",
+      "approved_by": "delivery-operations",
+      "released_at": "",
+      "release_approved_by": ""
+    },
+    {
+      "email_hash": "a3912cece9310e14568618f85dbed3d6cdb8a922d53ebb7439fb39d5a3c3e21f",
+      "email_mask": "m***@e***.edu",
+      "scope": "credentialing-2026",
+      "reason": "manual_hold",
+      "source": "support_case",
+      "active": true,
+      "created_at": "2026-05-01T10:28:00Z",
+      "approved_by": "registrar-reviewer",
+      "released_at": "",
+      "release_approved_by": ""
+    }
+  ],
+  "queue_items": [
+    {
+      "recipient_id": "recipient-001",
+      "email_hash": "94d0498fc60ea131f1e017e3f7ad6c0c3bd6a9f3c7f1a3a4ab7a07fdc59cd8ad",
+      "status": "sent",
+      "attempts": 1,
+      "last_error": "",
+      "suppression_checked": true,
+      "scheduled_at": "2026-05-01T11:00:00Z",
+      "next_attempt_at": ""
+    },
+    {
+      "recipient_id": "recipient-017",
+      "email_hash": "9be1f5bfed9f0e98728f20924683f5f3c2cc802b433b7b0c756214cf6ed9908c",
+      "status": "scheduled",
+      "attempts": 0,
+      "last_error": "",
+      "suppression_checked": true,
+      "scheduled_at": "2026-05-01T11:05:00Z",
+      "next_attempt_at": ""
+    },
+    {
+      "recipient_id": "recipient-044",
+      "email_hash": "ab7093e1754d15e9e0a2db74f55ea9d4e06ae5152e1d41d1f65a9a42b1f5fc06",
+      "status": "failed",
+      "attempts": 3,
+      "last_error": "550 mailbox unavailable",
+      "suppression_checked": true,
+      "scheduled_at": "2026-05-01T11:10:00Z",
+      "next_attempt_at": ""
+    }
+  ]
+}

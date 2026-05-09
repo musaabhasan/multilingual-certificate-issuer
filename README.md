@@ -17,6 +17,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | SMTP alignment audit | Sender-domain release gate | From-domain alignment, SPF, DKIM, DMARC, return-path, bounce/complaint handling, TLS, approval, and throttle checks |
+| Delivery suppression audit | Bounce and complaint release gate | Hard-bounce, complaint, manual-hold, retry, suppression-release, and queue-readiness checks |
 | Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
 | Correction and reissue | Controlled certificate replacement | Workflow for correction intake, severity classification, source-of-truth checks, re-rendering, hash changes, revocation or supersession, token rotation, and delivery |
@@ -62,6 +63,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 | [SMTP Domain Alignment Audit](docs/smtp-domain-alignment-audit.md) | Sender-domain release checks for SPF, DKIM, DMARC, return-path, TLS, bounce handling, complaints, approval, and throttle |
+| [Delivery Suppression And Bounce Governance Audit](docs/delivery-suppression-audit.md) | Pre-release checks for hard bounces, complaints, manual holds, retry limits, suppression release, and queued delivery readiness |
 | [Recipient Data Minimization Audit](docs/recipient-data-minimization-audit.md) | Pre-processing privacy gate for CSV fields, retention, access control, encryption, and external sharing |
 | [Recipient Collision Audit](docs/recipient-collision-audit.md) | Pre-render integrity gate for duplicate identifiers, certificate numbers, repeated emails, and ambiguous recipient rows |
 | [Batch Release Gate](docs/batch-release-gate.md) | Executable pre-send readiness checks for certificate delivery batches |
@@ -141,6 +143,12 @@ Run the SMTP domain alignment audit:
 php bin/smtp-domain-alignment-audit-demo.php examples/smtp-domain-alignment-sample.json
 ```
 
+Run the delivery suppression audit:
+
+```bash
+php bin/delivery-suppression-audit-demo.php examples/delivery-suppression-sample.json
+```
+
 ## Certificate Template Model
 
 Templates are stored as JSON-backed rows and rendered into PDF/A. Each text element declares a CSV source column, position, font size, alignment, color, and direction.
@@ -187,6 +195,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Use TLS for SMTP and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
 - Check hashed suppression records before sending to hard-bounced, complained, or manually held recipients.
+- Audit delivery suppression, retry, complaint, and release evidence before resuming or approving high-volume batches.
 - Run background delivery through CRON or a process supervisor.
 
 ## CRON Scheduling
