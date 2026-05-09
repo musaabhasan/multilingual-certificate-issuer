@@ -23,6 +23,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Recipient privacy | Data minimization audit | CSV field dictionary review, high-risk field detection, retention, access, encryption, and sharing checks |
 | Recipient integrity | Collision audit | Duplicate identifiers, repeated emails, certificate-number conflicts, and same-name/date ambiguity checks |
 | Correction and reissue | Controlled certificate replacement | Workflow for correction intake, severity classification, source-of-truth checks, re-rendering, hash changes, revocation or supersession, token rotation, and delivery |
+| Revocation and reissue operations | Credential withdrawal and replacement workflow | Revocation reasons, approval evidence, recipient notification, QR status handling, token rotation, replacement links, fraud response, and closure checks |
 | Batch release control | Pre-send readiness gate | Template approval, queue/render counts, suppression checks, hash manifest verification, SMTP alignment, throttle, and schedule checks |
 | Template asset integrity | Pre-render manifest audit | Background, font, seal, signature, and QR overlay hashes, embedding, DPI, license, approval, and Arabic font readiness checks |
 | Verification | Certificate validation | Verification tokens, PDF hash storage, lookup audit events, QR-ready flow |
@@ -89,6 +90,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
 | [Public Verification Abuse Response Playbook](docs/verification-abuse-response-playbook.md) | Response workflow for lookup spikes, token guessing, scraping, enumeration, exposed QR links, support-case abuse, containment, communications, and recovery |
 | [Certificate Correction And Reissue Workflow](docs/certificate-correction-reissue-workflow.md) | Controlled workflow for certificate corrections, re-rendering, hash changes, revocation or supersession decisions, verification-token impact, delivery, and audit closure |
+| [Certificate Revocation And Reissue Workflow](docs/certificate-revocation-reissue-workflow.md) | Revocation and replacement workflow for incorrect credentials, fraud reports, exposed verification tokens, public status handling, recipient notification, and closure evidence |
 
 ## Quick Start
 
@@ -207,6 +209,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Govern certificate signing keys, QR secrets, verification-token secrets, and manifest sealing keys with custody, rotation, backup, and compromise-response evidence.
 - Reconcile certificate hashes, queue records, SMTP events, bounces, suppression entries, and support disputes before batch closure.
 - Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
+- Record revocation and reissue decisions with source-of-truth evidence, recipient notification, public verification state, token impact, and closure proof.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
 - Use TLS for SMTP and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
