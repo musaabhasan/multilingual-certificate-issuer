@@ -14,6 +14,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Dynamic mapping | CSV fields to template elements | Header-based mapping, batch imports, validation before generation |
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
 | Bilingual rendering QA | Pre-release proofing workflow | Arabic shaping, RTL/LTR, mixed text, font embedding, PDF/A, QR placement, accessibility, and evidence checks |
+| PDF accessibility remediation | Inclusive certificate repair workflow | Reading order, language metadata, contrast, QR fallback text, font embedding, print proof, hash reconciliation, and reissue evidence |
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
@@ -67,6 +68,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
 | [Bilingual PDF Rendering QA Workflow](docs/bilingual-pdf-rendering-qa.md) | Release gate for Arabic/English proof batches, fonts, RTL/LTR behavior, PDF/A, QR verification, accessibility, and evidence retention |
+| [Certificate PDF Accessibility Remediation Workflow](docs/certificate-pdf-accessibility-remediation.md) | Remediation workflow for reading order, bilingual metadata, font embedding, contrast, QR fallback text, print proof, hash manifests, and reissue evidence |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 | [SMTP Domain Alignment Audit](docs/smtp-domain-alignment-audit.md) | Sender-domain release checks for SPF, DKIM, DMARC, return-path, TLS, bounce handling, complaints, approval, and throttle |
 | [Delivery Suppression And Bounce Governance Audit](docs/delivery-suppression-audit.md) | Pre-release checks for hard bounces, complaints, manual holds, retry limits, suppression release, and queued delivery readiness |
@@ -194,6 +196,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Enforce MFA for administrators.
 - Rotate passwords every 90 days.
 - Validate uploaded CSV, image, and font files by MIME type and size.
+- Remediate PDF accessibility defects before release, and reconcile any resulting PDF hash or verification changes.
 - Reject CSV files with empty headers, duplicate headers, or excessive recipient row counts.
 - Audit recipient CSV fields against an approved data dictionary before generation or delivery.
 - Block recipient collision findings before rendering certificates or creating delivery queue rows.
