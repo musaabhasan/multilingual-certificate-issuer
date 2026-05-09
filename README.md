@@ -25,6 +25,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Verification token rotation | Verification-link lifecycle control | Scheduled and incident-driven rotation for lookup tokens, QR secrets, receipts, support references, and audit logs |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
+| Batch evidence retention | Issuance evidence lifecycle | Retention, redaction, deletion, legal hold, and ownership rules for CSV files, PDFs, manifests, queues, receipts, revocations, and audit logs |
 | Verification receipts | Portable lookup evidence | Safe public metadata, canonical JSON, receipt SHA-256, and support-case attachment |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
@@ -67,6 +68,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 | [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
+| [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
 
 ## Quick Start
 
@@ -206,6 +208,7 @@ Recommended production additions:
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
+- Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
 - Recipient data minimization audit output attached to the batch approval record.
 - Recipient collision audit output attached to the batch approval record.
 
