@@ -28,6 +28,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Verification QR accessibility | Public lookup usability | QR scanning, visible fallback text, accessibility, revocation states, token rotation, and support evidence checks |
 | Verification token rotation | Verification-link lifecycle control | Scheduled and incident-driven rotation for lookup tokens, QR secrets, receipts, support references, and audit logs |
 | Verification abuse response | Public lookup protection | Response playbook for token guessing, scraping, enumeration, exposed QR links, suspicious support cases, and revoked-certificate probing |
+| Verification enumeration resistance | Public lookup hardening | Token entropy, response normalization, rate limits, sequential probing detection, abuse evidence, and privacy-minimized logs |
 | Revocation evidence | Ledger consistency audit | Status lifecycle, revocation authority, hash preservation, token rotation, notification, and replacement links |
 | Evidence integrity | Tamper-evident batch manifests | Per-certificate PDF hashes, deterministic manifest hash, and audit-ready verification |
 | Batch evidence retention | Issuance evidence lifecycle | Retention, redaction, deletion, legal hold, and ownership rules for CSV files, PDFs, manifests, queues, receipts, revocations, and audit logs |
@@ -78,6 +79,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Tamper-Evident Hash Manifest](docs/hash-manifest.md) | Batch-level certificate evidence manifest with per-PDF hashes and manifest integrity checks |
 | [Verification Receipt Evidence](docs/verification-receipt.md) | Tamper-evident JSON receipts for public lookup outcomes and support investigations |
 | [Verification Token Rotation Runbook](docs/verification-token-rotation-runbook.md) | Scheduled and incident-driven rotation for verification tokens, QR links, lookup receipts, revocation state, support references, and audit evidence |
+| [Verification Enumeration Resistance Workflow](docs/verification-enumeration-resistance-workflow.md) | Public lookup hardening workflow for token guessing, sequential probing, response normalization, rate limiting, abuse evidence, and privacy-minimized logs |
 | [Batch Evidence Retention Schedule](docs/batch-evidence-retention-schedule.md) | Retention, redaction, deletion, legal hold, and ownership rules for issuance evidence across CSV files, PDFs, manifests, SMTP queues, verification receipts, revocations, and audit logs |
 | [Certificate Delivery Proof Reconciliation Workflow](docs/certificate-delivery-proof-reconciliation.md) | Batch closure workflow for reconciling PDF hashes, queue state, SMTP message IDs, bounces, suppression, verification receipts, support disputes, and reissue evidence |
 | [Support Case Redaction Guide](docs/support-case-redaction-guide.md) | Redaction rules for sharing certificate evidence in verification, delivery, correction, revocation, vendor-support, and audit cases |
@@ -196,6 +198,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Confirm retention, access role, storage encryption, and sharing evidence before processing recipient data.
 - Keep generated PDFs outside the public web root.
 - Issue verification receipts with only safe public metadata and canonical receipt hashes.
+- Harden public verification against enumeration with high-entropy tokens, normalized responses, rate limits, and privacy-minimized abuse evidence.
 - Reconcile certificate hashes, queue records, SMTP events, bounces, suppression entries, and support disputes before batch closure.
 - Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
 - Log authentication, template, SMTP, CSV, generation, and delivery actions.
@@ -230,6 +233,7 @@ Recommended production additions:
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
+- Verification enumeration resistance workflow for token guessing, sequential probing, normalized lookup responses, and privacy-minimized abuse evidence.
 - Batch evidence retention schedule for raw CSV, rendered PDF, hash manifest, SMTP delivery, revocation, and support evidence lifecycle decisions.
 - Certificate delivery proof reconciliation for batch closure, delivery disputes, resend decisions, and reissue evidence.
 - Support case redaction guide for verification receipts, delivery disputes, corrections, revocations, and vendor support tickets.
