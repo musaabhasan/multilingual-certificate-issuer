@@ -21,6 +21,7 @@
   },
   "scripts": {
     "lint": "php bin/lint.php",
+    "delivery-suppression-audit": "php bin/delivery-suppression-audit-demo.php",
     "recipient-collision-audit": "php bin/recipient-collision-audit-demo.php",
     "recipient-data-audit": "php bin/recipient-data-audit-demo.php",
     "revocation-ledger-audit": "php bin/revocation-ledger-audit-demo.php",
