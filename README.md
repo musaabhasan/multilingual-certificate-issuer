@@ -13,6 +13,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Design engine | Visual component builder | Background upload, canvas preview, X/Y text positioning, JSON layout export |
 | Dynamic mapping | CSV fields to template elements | Header-based mapping, batch imports, validation before generation |
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
+| Bilingual rendering QA | Pre-release proofing workflow | Arabic shaping, RTL/LTR, mixed text, font embedding, PDF/A, QR placement, accessibility, and evidence checks |
 | Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
@@ -61,6 +62,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | [Project Plan](docs/project-plan.md) | Four-phase implementation plan with acceptance criteria |
 | [Deployment](docs/deployment.md) | Hosting, worker, backup, and go-live guidance |
 | [UAT Checklist](docs/uat-checklist.md) | Arabic/English acceptance tests and delivery checks |
+| [Bilingual PDF Rendering QA Workflow](docs/bilingual-pdf-rendering-qa.md) | Release gate for Arabic/English proof batches, fonts, RTL/LTR behavior, PDF/A, QR verification, accessibility, and evidence retention |
 | [Deliverability And Abuse Prevention](docs/deliverability-abuse-prevention.md) | SMTP reputation, bounce handling, batch approval, and misuse controls |
 | [SMTP Domain Alignment Audit](docs/smtp-domain-alignment-audit.md) | Sender-domain release checks for SPF, DKIM, DMARC, return-path, TLS, bounce handling, complaints, approval, and throttle |
 | [Delivery Suppression And Bounce Governance Audit](docs/delivery-suppression-audit.md) | Pre-release checks for hard bounces, complaints, manual holds, retry limits, suppression release, and queued delivery readiness |
