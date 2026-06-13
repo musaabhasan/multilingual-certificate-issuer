@@ -10,6 +10,7 @@
 <header class="topbar">
     <a class="brand" href="/">Certificate Issuer</a>
     <nav aria-label="Primary navigation">
+        <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html" aria-current="page">Designer</a>
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
@@ -25,16 +26,62 @@
             <p>Position bilingual text fields, choose direction, and export production-ready layout JSON.</p>
         </div>
         <div class="actions">
-            <button id="addText" class="primary" type="button">Add field</button>
+            <button id="addCsvField" class="primary" type="button">Add CSV field</button>
+            <button id="addStaticText" type="button">Add text</button>
+            <button id="addImage" type="button">Add image</button>
             <button id="exportLayout" type="button">Export JSON</button>
         </div>
     </section>
 
     <section class="designer-layout">
         <aside class="panel tool-panel">
-            <h2>Selected field</h2>
-            <label>Label <input id="fieldLabel" type="text" value="Recipient Name"></label>
-            <label>CSV source <input id="fieldSource" type="text" value="name_en"></label>
+            <h2>Template</h2>
+            <label>Saved templates
+                <select id="templateSelect"></select>
+            </label>
+            <label>Template name <input id="templateName" type="text" value="New Certificate Template"></label>
+            <label>Status
+                <select id="templateStatus">
+                    <option value="draft">Draft</option>
+                    <option value="approved">Approved</option>
+                    <option value="retired">Retired</option>
+                </select>
+            </label>
+            <div class="action-row">
+                <button id="loadTemplate" type="button">Load</button>
+                <button id="saveTemplate" class="primary" type="button">Save template</button>
+            </div>
+            <span id="templateSaveStatus" class="status locked">Local templates</span>
+
+            <h2>Background</h2>
+            <label>Image file <input id="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+            <label>Export path <input id="backgroundPath" type="text" value="storage/uploads/backgrounds/certificate.png"></label>
+            <label>Fit
+                <select id="backgroundFit">
+                    <option value="cover">Cover</option>
+                    <option value="contain">Contain</option>
+                    <option value="stretch">Stretch</option>
+                </select>
+            </label>
+            <button id="clearBackground" type="button">Clear background</button>
+            <span id="backgroundUploadStatus" class="status locked">No background uploaded</span>
+
+            <h2>Selected item</h2>
+            <label>Item name <input id="fieldLabel" type="text" value="Recipient Name"></label>
+            <label>CSV source
+                <select id="fieldSource"></select>
+            </label>
+            <label>Text content <textarea id="fieldText" class="short-textarea">Text</textarea></label>
+            <label>Image file <input id="itemImageFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+            <label>Image path <input id="itemImagePath" type="text" placeholder="storage/uploads/images/logo.png"></label>
+            <label>Image fit
+                <select id="itemImageFit">
+                    <option value="contain">Contain</option>
+                    <option value="cover">Cover</option>
+                    <option value="stretch">Stretch</option>
+                </select>
+            </label>
+            <span id="itemUploadStatus" class="status locked">No item image uploaded</span>
             <label>Direction
                 <select id="fieldDirection">
                     <option value="ltr">LTR</option>
@@ -49,8 +96,21 @@
                 </select>
             </label>
             <label>Font size <input id="fieldSize" type="number" min="8" max="72" value="20"></label>
+            <label>Font
+                <select id="fieldFont"></select>
+            </label>
             <label>Color <input id="fieldColor" type="color" value="#111827"></label>
-            <button id="applyField" type="button">Apply field settings</button>
+            <div class="position-grid">
+                <label>X <input id="fieldX" type="number" min="0" step="1"></label>
+                <label>Y <input id="fieldY" type="number" min="0" step="1"></label>
+                <label>W <input id="fieldWidth" type="number" min="8" step="1"></label>
+                <label>H <input id="fieldHeight" type="number" min="8" step="1"></label>
+            </div>
+            <div class="action-row">
+                <button id="applyField" type="button">Apply item</button>
+                <button id="duplicateItem" type="button">Duplicate</button>
+                <button id="deleteItem" type="button">Delete</button>
+            </div>
         </aside>
 
         <section class="designer-stage" aria-label="Certificate layout workspace">
@@ -62,11 +122,17 @@
         </section>
 
         <aside class="panel output-panel">
+            <div class="panel-header">
+                <h2>Items</h2>
+                <span id="itemCount" class="status locked">0 items</span>
+            </div>
+            <div id="itemList" class="item-list"></div>
             <h2>Layout JSON</h2>
             <textarea id="layoutOutput" spellcheck="false" aria-label="Template JSON output"></textarea>
         </aside>
     </section>
 </main>
+<script src="/assets/app-state.js"></script>
 <script src="/assets/designer.js"></script>
 </body>
 </html>

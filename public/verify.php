@@ -15,6 +15,7 @@ declare(strict_types=1);
 <header class="topbar">
     <a class="brand" href="/">Certificate Issuer</a>
     <nav aria-label="Primary navigation">
+        <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>

@@ -15,6 +15,7 @@ declare(strict_types=1);
 <header class="topbar">
     <a class="brand" href="/">Certificate Issuer</a>
     <nav aria-label="Primary navigation">
+        <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
@@ -38,22 +39,22 @@ declare(strict_types=1);
     <section class="metric-grid" aria-label="Operational metrics">
         <article class="metric">
             <span class="metric-label">Templates</span>
-            <strong>12</strong>
-            <span class="metric-note positive">4 approved</span>
+            <strong id="dashboardTemplates">0</strong>
+            <span id="dashboardApprovedTemplates" class="metric-note positive">0 approved</span>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Campaigns</span>
+            <strong id="dashboardCampaigns">0</strong>
+            <span id="dashboardActiveCampaigns" class="metric-note">0 active</span>
         </article>
         <article class="metric">
             <span class="metric-label">Queued mail</span>
-            <strong>248</strong>
-            <span class="metric-note">60 sec throttle</span>
-        </article>
-        <article class="metric">
-            <span class="metric-label">Rendered PDFs</span>
-            <strong>1,420</strong>
-            <span class="metric-note positive">PDF/A ready</span>
+            <strong id="dashboardQueued">0</strong>
+            <span class="metric-note positive">Across campaigns</span>
         </article>
         <article class="metric">
             <span class="metric-label">Failed sends</span>
-            <strong>3</strong>
+            <strong id="dashboardFailed">0</strong>
             <span class="metric-note warning">Needs review</span>
         </article>
     </section>
@@ -62,17 +63,12 @@ declare(strict_types=1);
         <article class="panel span-2">
             <div class="panel-header">
                 <div>
-                    <h2>Issuance workflow</h2>
-                    <p>Current batch: Cybersecurity Awareness May 2026</p>
+                    <h2>Active campaigns</h2>
+                    <p>Separate template, import, schedule, and delivery state per campaign.</p>
                 </div>
-                <span class="status ready">Ready to schedule</span>
+                <a href="/campaigns.html">Manage all</a>
             </div>
-            <ol class="stepper">
-                <li class="done"><span>1</span><div><strong>Template approved</strong><p>Arabic and English fields aligned on A4 landscape.</p></div></li>
-                <li class="done"><span>2</span><div><strong>CSV validated</strong><p>Unique identifiers, emails, names, and issue dates passed checks.</p></div></li>
-                <li class="active"><span>3</span><div><strong>PDF generation</strong><p>Rendering queue is producing private certificate files.</p></div></li>
-                <li><span>4</span><div><strong>SMTP distribution</strong><p>Delivery starts after approval and schedule confirmation.</p></div></li>
-            </ol>
+            <div id="dashboardCampaignList" class="mini-list"></div>
         </article>
 
         <article class="panel">
@@ -117,5 +113,7 @@ declare(strict_types=1);
         </article>
     </section>
 </main>
+<script src="/assets/app-state.js"></script>
+<script src="/assets/dashboard.js"></script>
 </body>
 </html>

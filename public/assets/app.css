@@ -15,6 +15,76 @@
     --shadow: 0 14px 34px rgba(20, 37, 63, 0.08);
 }
 
+@font-face {
+    font-family: "Bukra Regular";
+    src: url("/assets/fonts/bukra/29LTBukra-Regular.otf") format("opentype");
+}
+
+@font-face {
+    font-family: "Bukra Medium";
+    src: url("/assets/fonts/bukra/29LTBukra-Medium.otf") format("opentype");
+}
+
+@font-face {
+    font-family: "Bukra SemiBold";
+    src: url("/assets/fonts/bukra/29LTBukra-SemiBold.otf") format("opentype");
+}
+
+@font-face {
+    font-family: "Bukra Bold";
+    src: url("/assets/fonts/bukra/29LTBukra-Bold.otf") format("opentype");
+}
+
+@font-face {
+    font-family: "Bukra Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-Sl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Book Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-BkSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Light Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-LtSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra ExtraLight Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-ExLtSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Thin Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-TnSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Hairline Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-HrSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Medium Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-MdSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra SemiBold Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-SmBdSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra Bold Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-BdSl.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Bukra ExtraBold Slanted";
+    src: url("/assets/fonts/bukra/29LTBukra-ExBdSl.ttf") format("truetype");
+}
+
 * {
     box-sizing: border-box;
 }
@@ -51,6 +121,22 @@ button.primary,
     background: #145ea8;
     border-color: #145ea8;
     color: #ffffff;
+}
+
+.file-button {
+    margin: 0;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 input,
@@ -172,6 +258,12 @@ code {
     flex-wrap: wrap;
 }
 
+.action-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -225,6 +317,81 @@ code {
     gap: 16px;
 }
 
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: end;
+}
+
+.wide-field {
+    grid-column: span 2;
+}
+
+.full-field {
+    grid-column: 1 / -1;
+}
+
+.csv-summary {
+    align-self: stretch;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 40px;
+    border: 1px solid #d8e1ec;
+    border-radius: 7px;
+    padding: 9px 11px;
+    background: #f8fbff;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.csv-summary strong {
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.plan-preview {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    border: 1px solid #d8e1ec;
+    border-radius: 7px;
+    padding: 9px 11px;
+    color: var(--muted);
+    background: #f8fbff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.plan-preview.ready {
+    border-color: #b7e2c8;
+    color: var(--green);
+    background: #f1fbf5;
+}
+
+.plan-preview.warning {
+    border-color: #f1cf92;
+    color: var(--amber);
+    background: #fff8ed;
+}
+
+.attachment-note {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    border: 1px solid #b7e2c8;
+    border-radius: 7px;
+    padding: 9px 11px;
+    color: var(--green);
+    background: #f1fbf5;
+    font-size: 13px;
+    font-weight: 700;
+}
+
 .panel {
     padding: 18px;
 }
@@ -267,18 +434,21 @@ code {
 }
 
 .status.ready,
+.status.sent,
 .pill.sent {
     background: #e8f7ee;
     color: var(--green);
 }
 
 .status.locked,
+.status.pending,
 .pill.queued {
     background: #eaf3ff;
     color: var(--blue);
 }
 
 .pill.failed,
+.status.failed,
 .status.warning {
     background: #fff4e5;
     color: var(--amber);
@@ -336,10 +506,162 @@ code {
     padding-left: 18px;
 }
 
+.stacked-controls {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.campaign-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.compact-campaign-grid {
+    grid-template-columns: 1fr;
+}
+
+.campaign-card {
+    border: 1px solid #d8e1ec;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fbfdff;
+}
+
+.campaign-card h3 {
+    margin: 0;
+    font-size: 17px;
+}
+
+.campaign-card p {
+    margin: 4px 0 0;
+}
+
+.email-editor {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    border-top: 1px solid #e6edf5;
+    padding-top: 14px;
+}
+
+.email-preview {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0;
+    border: 1px solid #e6edf5;
+    border-radius: 8px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+.email-preview pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #475467;
+    font: 13px/1.45 Consolas, "Courier New", monospace;
+}
+
+.compact-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 12px 0 14px;
+}
+
+.mini-list {
+    display: grid;
+    gap: 10px;
+}
+
+.mini-list-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    border: 1px solid #e6edf5;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.mini-list-row strong,
+.mini-list-row span:not(.status) {
+    display: block;
+}
+
+.mini-list-row span:not(.status) {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.progress-bar {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e6edf5;
+    margin: 12px 0;
+}
+
+.progress-bar span {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    background: var(--green);
+}
+
+.event-list {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0;
+    border-top: 1px solid #e6edf5;
+    padding-top: 12px;
+}
+
+.event-list div {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 8px;
+    align-items: start;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.event-list strong {
+    color: #344054;
+    font-size: 12px;
+}
+
 .compact-table,
 .data-table {
     width: 100%;
     border-collapse: collapse;
+}
+
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table-scroll .data-table {
+    min-width: 720px;
+}
+
+.compact-preview {
+    font-size: 13px;
+}
+
+.compact-preview th,
+.compact-preview td {
+    padding: 8px 9px;
+}
+
+.recipient-preview {
+    margin-top: 14px;
+}
+
+.recipient-preview .data-table {
+    min-width: 560px;
 }
 
 .compact-table th,
@@ -417,30 +739,104 @@ code {
     position: relative;
     aspect-ratio: 1.414 / 1;
     background:
+        var(--certificate-background-image, none),
         linear-gradient(90deg, rgba(20, 94, 168, 0.06) 1px, transparent 1px),
         linear-gradient(rgba(20, 94, 168, 0.06) 1px, transparent 1px),
         linear-gradient(135deg, #fff 0%, #f8fbff 100%);
-    background-size: 24px 24px, 24px 24px, auto;
+    background-position: center, 0 0, 0 0, center;
+    background-repeat: no-repeat, repeat, repeat, no-repeat;
+    background-size: var(--certificate-background-size, auto), 24px 24px, 24px 24px, auto;
     border: 1px solid #aebed1;
     border-radius: 8px;
     overflow: hidden;
 }
 
-.text-box {
-    position: absolute;
-    min-width: 132px;
-    min-height: 30px;
-    padding: 6px 9px;
-    border: 1px dashed var(--teal);
-    background: rgba(255, 255, 255, 0.88);
-    color: #111827;
-    cursor: move;
-    user-select: none;
+.canvas.has-background {
+    background-size: var(--certificate-background-size, cover), 24px 24px, 24px 24px, auto;
 }
 
-.text-box.selected {
+.canvas[data-background-fit="cover"] {
+    --certificate-background-size: cover;
+}
+
+.canvas[data-background-fit="contain"] {
+    --certificate-background-size: contain;
+}
+
+.canvas[data-background-fit="stretch"] {
+    --certificate-background-size: 100% 100%;
+}
+
+.design-item {
+    position: absolute;
+    min-width: 40px;
+    min-height: 24px;
+    border: 1px dashed var(--teal);
+    cursor: move;
+    user-select: none;
+    overflow: hidden;
+}
+
+.text-box {
+    padding: 6px 9px;
+    background: rgba(255, 255, 255, 0.88);
+    color: #111827;
+}
+
+.image-item {
+    display: grid;
+    place-items: center;
+    padding: 6px;
+    background-color: rgba(234, 243, 255, 0.82);
+    background-position: center;
+    background-repeat: no-repeat;
+    color: #536275;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+}
+
+.design-item.selected {
     border-style: solid;
     box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.item-list {
+    display: grid;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.item-row {
+    display: grid;
+    justify-items: start;
+    min-height: auto;
+    padding: 10px 11px;
+    text-align: left;
+}
+
+.item-row.active {
+    border-color: var(--teal);
+    background: #eefaf8;
+}
+
+.item-row span,
+.item-row small {
+    display: block;
+}
+
+.item-row small {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.position-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
 }
 
 textarea {
@@ -448,6 +844,13 @@ textarea {
     padding: 14px;
     font: 13px/1.5 Consolas, "Courier New", monospace;
     resize: vertical;
+}
+
+textarea.short-textarea {
+    min-height: 110px;
+    padding: 10px;
+    font: inherit;
+    line-height: 1.45;
 }
 
 .detail-list {
@@ -486,13 +889,21 @@ textarea {
 @media (max-width: 980px) {
     .metric-grid,
     .workspace,
-    .designer-layout {
+    .designer-layout,
+    .form-grid,
+    .campaign-grid {
         grid-template-columns: 1fr;
     }
 
     .span-2,
-    .span-3 {
+    .span-3,
+    .wide-field,
+    .full-field {
         grid-column: auto;
+    }
+
+    .csv-summary {
+        grid-template-columns: 1fr;
     }
 
     .page-title {

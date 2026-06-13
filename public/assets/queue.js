@@ -1,0 +1,146 @@
+const queueStore = window.CertificateIssuerStore;
+const queueCampaignList = document.querySelector("#queueCampaignList");
+
+function renderQueue() {
+  queueStore.syncDeliveryProgress();
+  const summary = queueStore.summary();
+  const campaigns = queueStore.campaigns();
+  const activePlans = campaigns
+    .filter((campaign) => ["scheduled", "running"].includes(campaign.status))
+    .map((campaign) => queueStore.deliveryPlan(campaign));
+  const slowestSpacing = activePlans.reduce((max, plan) => Math.max(max, plan.calculatedSpacingSeconds), 0);
+
+  document.querySelector("#queuePending").textContent = String(summary.queued);
+  document.querySelector("#queueSent").textContent = String(summary.sent);
+  document.querySelector("#queueFailed").textContent = String(summary.failed);
+  document.querySelector("#queueSpacing").textContent = queueStore.formatDuration(slowestSpacing);
+  document.querySelector("#queueWorkerStatus").textContent = `${summary.activeCampaigns} active lanes`;
+
+  queueCampaignList.innerHTML = campaigns.map((campaign) => renderCampaignQueue(campaign)).join("");
+}
+
+function renderCampaignQueue(campaign) {
+  const template = queueStore.campaignTemplate(campaign);
+  const plan = queueStore.deliveryPlan(campaign);
+  const recipients = Number(campaign.recipients || 0);
+  const sent = Number(campaign.sent || 0);
+  const failed = Number(campaign.failed || 0);
+  const pending = Math.max(recipients - sent - failed, 0);
+  const progress = recipients > 0 ? Math.round((sent / recipients) * 100) : 0;
+  const planClass = plan.fitsMinimumWindow ? "status ready" : "status warning";
+  const events = (campaign.deliveryEvents || []).slice(-4).reverse();
+  const recipientRows = (campaign.recipientQueue || []).slice(0, 10);
+
+  return `
+    <article class="campaign-card">
+      <div class="panel-header">
+        <div>
+          <h3>${escapeHtml(campaign.name)}</h3>
+          <p>${escapeHtml(template?.name || "No template")}</p>
+        </div>
+        <span class="${queueStore.statusClass(campaign.status)}">${queueStore.statusLabel(campaign.status)}</span>
+      </div>
+      <div class="progress-bar" aria-label="Campaign progress"><span style="width: ${progress}%"></span></div>
+      <dl class="detail-list compact-details">
+        <div><dt>CSV file</dt><dd>${escapeHtml(campaign.importFileName || "No CSV attached")}</dd></div>
+        <div><dt>Labels</dt><dd>${escapeHtml((campaign.labels || []).slice(0, 4).join(", ") || "None")}${(campaign.labels || []).length > 4 ? ` +${(campaign.labels || []).length - 4}` : ""}</dd></div>
+        <div><dt>Pending</dt><dd>${pending}</dd></div>
+        <div><dt>Sent</dt><dd>${sent}</dd></div>
+        <div><dt>Failed</dt><dd>${failed}</dd></div>
+        <div><dt>Next send</dt><dd>${escapeHtml(nextSendLabel(campaign, plan))}</dd></div>
+        <div><dt>Window</dt><dd>${escapeHtml(windowLabel(campaign))}</dd></div>
+        <div><dt>Avg spacing</dt><dd>${queueStore.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
+        <div><dt>Random buffer</dt><dd>${queueStore.formatDuration(plan.randomMin)}-${queueStore.formatDuration(plan.randomMax)}</dd></div>
+        <div><dt>SMTP</dt><dd>${escapeHtml(campaign.smtpProfile || "Institution SMTP")}</dd></div>
+        <div><dt>Subject</dt><dd>${escapeHtml(campaign.emailSubject || "Your certificate is ready")}</dd></div>
+        <div><dt>Attachment</dt><dd><span class="pill sent">certificate.pdf</span></dd></div>
+      </dl>
+      <span class="${planClass}">${plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer"}</span>
+      <div class="email-preview">
+        <strong>Email body</strong>
+        <pre>${escapeHtml(campaign.emailBodyHtml || "<p>Your certificate is attached as a PDF.</p>")}</pre>
+      </div>
+      <div class="table-scroll recipient-preview">
+        <table class="data-table compact-preview">
+          <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Sent at</th></tr></thead>
+          <tbody>
+            ${recipientRows.map((recipient) => `
+              <tr>
+                <td>${Number(recipient.sequence || 0)}</td>
+                <td>${escapeHtml(recipient.displayName)}</td>
+                <td>${escapeHtml(recipient.email || "-")}</td>
+                <td><span class="${queueStore.recipientStatusClass(recipient.status)}">${queueStore.recipientStatusLabel(recipient.status)}</span></td>
+                <td>${escapeHtml(shortTime(recipient.sentAt) || "-")}</td>
+              </tr>
+            `).join("") || "<tr><td colspan=\"5\">No recipient CSV attached yet.</td></tr>"}
+          </tbody>
+        </table>
+      </div>
+      <div class="event-list">
+        ${events.map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No sends recorded yet.</span></div>"}
+      </div>
+      <div class="action-row">
+        <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
+        <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
+        <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+        <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}">Complete</button>
+      </div>
+    </article>
+  `;
+}
+
+queueCampaignList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+
+  if (button.dataset.action === "running") {
+    queueStore.startCampaign(button.dataset.id);
+  } else if (button.dataset.action === "send-one") {
+    queueStore.manualSendOne(button.dataset.id);
+  } else if (button.dataset.action === "completed") {
+    queueStore.completeCampaign(button.dataset.id);
+  } else {
+    queueStore.updateCampaign(button.dataset.id, { status: button.dataset.action });
+  }
+
+  renderQueue();
+});
+
+function nextSendLabel(campaign, plan) {
+  if (campaign.status === "completed") return "Done";
+  if (campaign.status === "paused") return "Paused";
+  if (!plan.start || plan.recipients === 0) return "Not scheduled";
+  if (Number(campaign.sent || 0) >= plan.recipients) return "Done";
+
+  const next = new Date(plan.start.getTime() + Number(campaign.sent || 0) * plan.calculatedSpacingSeconds * 1000);
+  return shortTime(next.toISOString());
+}
+
+function windowLabel(campaign) {
+  if (!campaign.windowStartAt && !campaign.windowEndAt) return "Not set";
+  return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "?"}`;
+}
+
+function shortTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+renderQueue();
+setInterval(renderQueue, 5000);
