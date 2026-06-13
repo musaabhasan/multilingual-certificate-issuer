@@ -100,8 +100,9 @@ let backgroundPreviewUrl = "";
 let currentTemplateId = null;
 
 function applyBackgroundPreview() {
-  canvas.classList.toggle("has-background", Boolean(backgroundPreviewUrl));
-  canvas.style.setProperty("--certificate-background-image", backgroundPreviewUrl ? `url("${backgroundPreviewUrl}")` : "none");
+  const imageUrl = backgroundPreviewUrl || browserAssetUrl(backgroundPath.value);
+  canvas.classList.toggle("has-background", Boolean(imageUrl));
+  canvas.style.setProperty("--certificate-background-image", imageUrl ? `url("${imageUrl}")` : "none");
   canvas.dataset.backgroundFit = backgroundFit.value;
 }
 
@@ -199,7 +200,7 @@ function applyItemStyles(item) {
   item.style.color = item.dataset.color;
 
   if (type === "image") {
-    const imageUrl = item.dataset.previewUrl || item.dataset.src;
+    const imageUrl = item.dataset.previewUrl || browserAssetUrl(item.dataset.src);
     item.textContent = imageUrl ? "" : "Image";
     item.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : "";
     item.style.backgroundSize = imageFitToCss(item.dataset.fit);
@@ -555,6 +556,16 @@ function imageFitToCss(fit) {
   return "contain";
 }
 
+function browserAssetUrl(path) {
+  const cleanPath = String(path || "").trim();
+  if (!cleanPath) return "";
+  if (/^(blob:|data:|https?:\/\/|\/asset\.php\?)/i.test(cleanPath)) return cleanPath;
+  if (/^storage\/uploads\/(backgrounds|images)\//i.test(cleanPath)) {
+    return `/asset.php?path=${encodeURIComponent(cleanPath)}`;
+  }
+  return cleanPath;
+}
+
 function fontCssFamily(fontValue) {
   const css = fontOptions.find((font) => font.value === normalizeFont(fontValue))?.css || "DejaVu Sans";
   return css
@@ -661,7 +672,10 @@ backgroundFile.addEventListener("change", async () => {
     setUploadStatus(backgroundUploadStatus, error.message, "failed");
   }
 });
-backgroundPath.addEventListener("input", exportJson);
+backgroundPath.addEventListener("input", () => {
+  applyBackgroundPreview();
+  exportJson();
+});
 backgroundFit.addEventListener("change", () => {
   applyBackgroundPreview();
   exportJson();

@@ -19,7 +19,7 @@ services:
 
   worker:
     build: .
-    command: php bin/queue-worker.php --once
+    command: php bin/platform-worker.php --once
     environment:
       APP_ENV: local
       DB_HOST: mysql

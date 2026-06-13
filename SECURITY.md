@@ -19,7 +19,8 @@ Do not open public issues for vulnerabilities that could expose credentials, pri
 ## Production Requirements
 
 - HTTPS-only application access.
-- MFA for all administrators.
+- Strong password policy for all administrators.
+- Rate limiting for login and public verification attempts.
 - Strong password hashing with PHP `password_hash`.
 - Password rotation policy for privileged users.
 - Database backups encrypted at rest.

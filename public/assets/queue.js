@@ -93,7 +93,7 @@ function renderCampaignQueue(campaign) {
         <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
         <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
         <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
-        <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}">Complete</button>
+        <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
       </div>
     </article>
   `;

@@ -37,14 +37,14 @@ This guide describes a production deployment pattern for organizations that need
 CRON example:
 
 ```cron
-* * * * * cd /var/www/certificate-issuer && php bin/queue-worker.php >> storage/logs/worker.log 2>&1
+* * * * * cd /var/www/certificate-issuer && php bin/platform-worker.php --once >> storage/logs/worker.log 2>&1
 ```
 
 Supervisor example:
 
 ```ini
 [program:certificate-worker]
-command=php /var/www/certificate-issuer/bin/queue-worker.php
+command=php /var/www/certificate-issuer/bin/platform-worker.php --sleep=10
 autostart=true
 autorestart=true
 user=www-data
@@ -55,6 +55,7 @@ stdout_logfile=/var/www/certificate-issuer/storage/logs/worker.log
 ## Backup Requirements
 
 - MySQL dump or managed backup.
+- `storage/app` for platform settings, users, encrypted SMTP passwords, state, audit logs, and rate limits.
 - Generated certificate storage.
 - Uploaded backgrounds.
 - Encrypted SMTP profiles.
@@ -73,7 +74,7 @@ Set `QUEUE_STALE_PROCESSING_MINUTES` to the longest expected SMTP delivery windo
 ## Go-Live Checklist
 
 - HTTPS configured.
-- MFA tested.
+- Administrator setup and password policy tested.
 - SMTP test message sent.
 - Arabic PDF rendering verified.
 - English PDF rendering verified.

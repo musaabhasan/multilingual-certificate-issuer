@@ -27,7 +27,8 @@
     "revocation-ledger-audit": "php bin/revocation-ledger-audit-demo.php",
     "smtp-domain-alignment-audit": "php bin/smtp-domain-alignment-audit-demo.php",
     "template-asset-audit": "php bin/template-asset-audit-demo.php",
-    "worker": "php bin/queue-worker.php"
+    "worker": "php bin/platform-worker.php",
+    "db-worker": "php bin/queue-worker.php"
   },
   "config": {
     "sort-packages": true,

@@ -123,6 +123,11 @@ button.primary,
     color: #ffffff;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
 .file-button {
     margin: 0;
 }

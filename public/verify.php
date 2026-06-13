@@ -8,10 +8,15 @@ $certificateNumber = trim((string) ($_POST['certificate_number'] ?? $_GET['certi
 $token = trim((string) ($_POST['token'] ?? $_GET['token'] ?? ''));
 $lookup = null;
 $searched = false;
+$error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || ($certificateNumber !== '' && $token !== '')) {
     $searched = true;
-    $lookup = app_verify_certificate_lookup($certificateNumber, $token);
+    try {
+        $lookup = app_verify_certificate_lookup($certificateNumber, $token);
+    } catch (Throwable $exception) {
+        $error = $exception->getMessage();
+    }
 }
 
 function e(string $value): string
@@ -58,7 +63,7 @@ function e(string $value): string
         <section class="panel verification-result">
             <span class="status failed">Invalid</span>
             <h2>Certificate not verified</h2>
-            <p>No issued certificate matched that number and token.</p>
+            <p><?= e($error !== '' ? $error : 'No issued certificate matched that number and token.') ?></p>
         </section>
     <?php elseif (is_array($lookup)): ?>
         <section class="panel verification-result">

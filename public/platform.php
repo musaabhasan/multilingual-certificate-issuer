@@ -6,21 +6,61 @@ use CertificateIssuer\Certificate\CertificateRenderer;
 use CertificateIssuer\Certificate\TemplateLayout;
 use CertificateIssuer\Mail\EmailTemplateRenderer;
 use CertificateIssuer\Security\PasswordPolicy;
+use CertificateIssuer\Support\Env;
 use PHPMailer\PHPMailer\PHPMailer;
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
+Env::load(dirname(__DIR__) . '/.env');
+date_default_timezone_set(Env::get('APP_TIMEZONE', 'UTC') ?: 'UTC');
+
+if (PHP_SAPI !== 'cli') {
+    app_send_security_headers();
+}
+
+if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
     session_name('certificate_issuer_session');
     session_set_cookie_params([
         'httponly' => true,
         'samesite' => 'Lax',
-        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'secure' => app_is_https() || app_env_bool('APP_FORCE_HTTPS', false),
     ]);
     session_start();
 }
 
 chdir(dirname(__DIR__));
+
+function app_env_bool(string $key, bool $default): bool
+{
+    $value = Env::get($key);
+    if ($value === null || $value === '') {
+        return $default;
+    }
+
+    return in_array(strtolower($value), ['1', 'true', 'yes', 'on'], true);
+}
+
+function app_is_https(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+
+    return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+}
+
+function app_send_security_headers(): void
+{
+    if (headers_sent()) {
+        return;
+    }
+
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
+    header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+}
 
 function app_storage_path(string $path = ''): string
 {
@@ -41,6 +81,7 @@ function app_json_response(array $payload, int $status = 200): never
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
     echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -151,10 +192,57 @@ function app_state(): array
 
 function app_save_state(array $state): void
 {
-    app_write_json(app_storage_path('state.json'), [
-        'templates' => is_array($state['templates'] ?? null) ? $state['templates'] : [],
-        'campaigns' => is_array($state['campaigns'] ?? null) ? $state['campaigns'] : [],
-    ]);
+    app_write_json(app_storage_path('state.json'), app_validate_state($state));
+}
+
+function app_validate_state(array $state): array
+{
+    $templates = is_array($state['templates'] ?? null) ? array_values($state['templates']) : [];
+    $campaigns = is_array($state['campaigns'] ?? null) ? array_values($state['campaigns']) : [];
+
+    if (count($templates) > 100) {
+        throw new RuntimeException('Template limit exceeded.');
+    }
+
+    if (count($campaigns) > 200) {
+        throw new RuntimeException('Campaign limit exceeded.');
+    }
+
+    foreach ($templates as $template) {
+        if (!is_array($template) || trim((string) ($template['id'] ?? '')) === '' || trim((string) ($template['name'] ?? '')) === '') {
+            throw new RuntimeException('Each template requires an id and name.');
+        }
+
+        $elements = $template['layout']['elements'] ?? [];
+        if (is_array($elements) && count($elements) > 200) {
+            throw new RuntimeException('Template item limit exceeded.');
+        }
+    }
+
+    foreach ($campaigns as $campaign) {
+        if (!is_array($campaign) || trim((string) ($campaign['id'] ?? '')) === '' || trim((string) ($campaign['name'] ?? '')) === '') {
+            throw new RuntimeException('Each campaign requires an id and name.');
+        }
+
+        $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
+        if (count($queue) > 10000) {
+            throw new RuntimeException('Recipient limit exceeded for one campaign.');
+        }
+
+        foreach ($queue as $recipient) {
+            if (!is_array($recipient)) {
+                throw new RuntimeException('Recipient queue records must be objects.');
+            }
+
+            $recipientData = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];
+            $email = trim((string) ($recipient['email'] ?? ($recipientData['email'] ?? '')));
+            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Recipient email is invalid.');
+            }
+        }
+    }
+
+    return ['templates' => $templates, 'campaigns' => $campaigns];
 }
 
 function app_default_settings(): array
@@ -204,21 +292,45 @@ function app_save_settings(array $input): array
 
     $current['platform']['name'] = trim((string) ($platform['name'] ?? $current['platform']['name']));
     $current['platform']['publicBaseUrl'] = trim((string) ($platform['publicBaseUrl'] ?? $current['platform']['publicBaseUrl']));
-    $current['security']['sessionTimeoutMinutes'] = max(15, (int) ($security['sessionTimeoutMinutes'] ?? $current['security']['sessionTimeoutMinutes']));
-    $current['security']['passwordRotationDays'] = max(1, (int) ($security['passwordRotationDays'] ?? $current['security']['passwordRotationDays']));
+    if ($current['platform']['name'] === '') {
+        throw new RuntimeException('Platform name is required.');
+    }
+    if (!filter_var($current['platform']['publicBaseUrl'], FILTER_VALIDATE_URL) || !preg_match('/^https?:\/\//', $current['platform']['publicBaseUrl'])) {
+        throw new RuntimeException('Public base URL must be a valid HTTP or HTTPS URL.');
+    }
+    $current['security']['sessionTimeoutMinutes'] = min(1440, max(15, (int) ($security['sessionTimeoutMinutes'] ?? $current['security']['sessionTimeoutMinutes'])));
+    $current['security']['passwordRotationDays'] = min(365, max(1, (int) ($security['passwordRotationDays'] ?? $current['security']['passwordRotationDays'])));
 
     $current['smtp']['profileName'] = trim((string) ($smtp['profileName'] ?? $current['smtp']['profileName']));
     $current['smtp']['deliveryMode'] = in_array(($smtp['deliveryMode'] ?? 'log'), ['log', 'smtp'], true) ? $smtp['deliveryMode'] : 'log';
     $current['smtp']['host'] = trim((string) ($smtp['host'] ?? $current['smtp']['host']));
-    $current['smtp']['port'] = max(1, (int) ($smtp['port'] ?? $current['smtp']['port']));
+    $current['smtp']['port'] = min(65535, max(1, (int) ($smtp['port'] ?? $current['smtp']['port'])));
     $current['smtp']['encryption'] = in_array(($smtp['encryption'] ?? 'tls'), ['tls', 'ssl'], true) ? $smtp['encryption'] : 'tls';
     $current['smtp']['username'] = trim((string) ($smtp['username'] ?? $current['smtp']['username']));
     $current['smtp']['fromAddress'] = trim((string) ($smtp['fromAddress'] ?? $current['smtp']['fromAddress']));
     $current['smtp']['fromName'] = trim((string) ($smtp['fromName'] ?? $current['smtp']['fromName']));
 
+    if ($current['smtp']['deliveryMode'] === 'smtp') {
+        foreach (['host', 'username', 'fromAddress'] as $required) {
+            if (($current['smtp'][$required] ?? '') === '') {
+                throw new RuntimeException('SMTP mode requires host, username, and from address.');
+            }
+        }
+
+        if (!filter_var($current['smtp']['fromAddress'], FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('SMTP from address is invalid.');
+        }
+    } elseif ($current['smtp']['fromAddress'] !== '' && !filter_var($current['smtp']['fromAddress'], FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('SMTP from address is invalid.');
+    }
+
     $plainPassword = (string) ($smtp['password'] ?? '');
     if ($plainPassword !== '') {
         $current['smtp']['encryptedPassword'] = app_encrypt_secret($plainPassword);
+    }
+
+    if ($current['smtp']['deliveryMode'] === 'smtp' && ($current['smtp']['encryptedPassword'] ?? '') === '') {
+        throw new RuntimeException('SMTP mode requires a password.');
     }
 
     app_write_json(app_storage_path('settings.json'), $current);
@@ -285,6 +397,28 @@ function app_require_auth(bool $json = false): array
     $next = rawurlencode($_SERVER['REQUEST_URI'] ?? '/');
     header('Location: /login.php?next=' . $next);
     exit;
+}
+
+function app_require_write_access(array $user, bool $json = true): void
+{
+    if (!in_array(($user['role'] ?? ''), ['administrator', 'designer', 'operator'], true)) {
+        if ($json) {
+            app_json_response(['error' => 'Write access required.'], 403);
+        }
+
+        throw new RuntimeException('Write access required.');
+    }
+}
+
+function app_require_delivery_access(array $user, bool $json = true): void
+{
+    if (!in_array(($user['role'] ?? ''), ['administrator', 'operator'], true)) {
+        if ($json) {
+            app_json_response(['error' => 'Delivery access required.'], 403);
+        }
+
+        throw new RuntimeException('Delivery access required.');
+    }
 }
 
 function app_csrf_token(): string
@@ -474,6 +608,48 @@ function app_recent_audit(int $limit = 30): array
     }, array_slice($lines, -$limit))));
 }
 
+function app_client_ip(): string
+{
+    return (string) ($_SERVER['REMOTE_ADDR'] ?? 'cli');
+}
+
+function app_enforce_rate_limit(string $scope, string $key, int $limit, int $windowSeconds): void
+{
+    $safeScope = app_slug($scope);
+    $path = app_storage_path('rate-limits' . DIRECTORY_SEPARATOR . $safeScope . '.json');
+    $now = time();
+    $bucketKey = hash('sha256', $key);
+    $records = app_read_json($path, []);
+    $timestamps = array_values(array_filter(
+        is_array($records[$bucketKey] ?? null) ? $records[$bucketKey] : [],
+        static fn (mixed $timestamp): bool => is_int($timestamp) && $timestamp > $now - $windowSeconds
+    ));
+
+    if (count($timestamps) >= $limit) {
+        throw new RuntimeException('Too many attempts. Please wait before trying again.');
+    }
+
+    $timestamps[] = $now;
+    $records[$bucketKey] = $timestamps;
+
+    foreach ($records as $recordKey => $recordTimestamps) {
+        if (!is_array($recordTimestamps)) {
+            unset($records[$recordKey]);
+            continue;
+        }
+
+        $records[$recordKey] = array_values(array_filter(
+            $recordTimestamps,
+            static fn (mixed $timestamp): bool => is_int($timestamp) && $timestamp > $now - $windowSeconds
+        ));
+        if ($records[$recordKey] === []) {
+            unset($records[$recordKey]);
+        }
+    }
+
+    app_write_json($path, $records);
+}
+
 function app_find_campaign(array $state, string $campaignId): ?array
 {
     foreach ($state['campaigns'] as $index => $campaign) {
@@ -582,32 +758,25 @@ function app_complete_campaign(string $campaignId): array
         throw new RuntimeException('Campaign not found.');
     }
 
+    $campaign = $found['campaign'];
     $queue = is_array($found['campaign']['recipientQueue'] ?? null) ? $found['campaign']['recipientQueue'] : [];
-    if ($queue === []) {
-        $campaign = $found['campaign'];
-        $campaign['status'] = 'completed';
-        $campaign['sent'] = (int) ($campaign['recipients'] ?? 0);
-        $campaign['rendered'] = (int) ($campaign['recipients'] ?? 0);
-        $campaign['completedAt'] = app_now();
-        $campaign['updatedAt'] = app_now();
-        $campaign['deliveryEvents'] = array_slice([
-            ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
-            ['at' => app_now(), 'message' => 'Campaign marked completed.'],
-        ], -80);
-        $state['campaigns'][$found['index']] = $campaign;
-        app_save_state($state);
-        return $state;
+    if ($queue !== [] && !app_all_recipients_terminal($queue)) {
+        throw new RuntimeException('Campaign still has queued recipients. Use the scheduled queue or send one certificate at a time.');
     }
 
-    $limit = count($queue);
-    for ($index = 0; $index < $limit; $index++) {
-        $state = app_send_one($campaignId);
-        $found = app_find_campaign($state, $campaignId);
-        if ($found === null || app_all_recipients_terminal(is_array($found['campaign']['recipientQueue'] ?? null) ? $found['campaign']['recipientQueue'] : [])) {
-            break;
-        }
+    if ($queue === [] && (int) ($campaign['sent'] ?? 0) < (int) ($campaign['recipients'] ?? 0)) {
+        throw new RuntimeException('Campaign cannot be completed until all recipients are sent, failed, or skipped.');
     }
 
+    $campaign['status'] = 'completed';
+    $campaign['completedAt'] = app_now();
+    $campaign['updatedAt'] = app_now();
+    $campaign['deliveryEvents'] = array_slice([
+        ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
+        ['at' => app_now(), 'message' => 'Campaign closed after all recipients reached terminal status.'],
+    ], -80);
+    $state['campaigns'][$found['index']] = $campaign;
+    app_save_state($state);
     app_audit('campaign.completed', 'campaign', $campaignId);
     return app_state();
 }
@@ -669,7 +838,7 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
 {
     $data = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];
     $identifier = (string) ($recipient['identifier'] ?? $data['unique_identifier'] ?? $recipient['id'] ?? bin2hex(random_bytes(4)));
-    $verificationToken = bin2hex(random_bytes(16));
+    $verificationToken = bin2hex(random_bytes(32));
     $verificationUrl = rtrim((string) (app_settings()['platform']['publicBaseUrl'] ?? ''), '/') . '/verify.php?certificate_number=' . rawurlencode($identifier) . '&token=' . rawurlencode($verificationToken);
     $data['verification_token'] = $verificationToken;
     $data['verification_url'] = $verificationUrl;
@@ -785,6 +954,7 @@ function app_verify_certificate_lookup(string $certificateNumber, string $token)
     if ($certificateNumber === '' || $token === '') {
         return null;
     }
+    app_enforce_rate_limit('verify', app_client_ip() . ':' . strtolower($certificateNumber), 30, 3600);
 
     $state = app_state();
     $tokenHash = hash('sha256', $token);

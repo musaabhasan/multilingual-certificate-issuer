@@ -489,6 +489,11 @@
 
   function syncDeliveryProgress(referenceDate = new Date()) {
     void referenceDate;
+    const role = window.CertificateIssuerAuth?.user?.role || "";
+    if (!["administrator", "operator"].includes(role)) {
+      return getState();
+    }
+
     try {
       return applyServerState(serverRequest("POST", "dispatch-due", {}));
     } catch (error) {
@@ -505,8 +510,7 @@
   }
 
   function toDateTimeLocal(date) {
-    const pad = (value) => String(value).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return date.toISOString();
   }
 
   function campaignTemplate(campaign) {

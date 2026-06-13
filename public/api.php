@@ -34,6 +34,7 @@ try {
     }
 
     if ($action === 'state' && $method === 'POST') {
+        app_require_write_access($user);
         $payload = app_json_payload();
         app_save_state($payload);
         app_audit('state.saved', 'state');
@@ -94,6 +95,7 @@ try {
     }
 
     if ($action === 'send-one' && $method === 'POST') {
+        app_require_delivery_access($user);
         $payload = app_json_payload();
         $state = app_send_one((string) ($payload['id'] ?? ''));
         app_json_response([
@@ -104,6 +106,7 @@ try {
     }
 
     if ($action === 'complete-campaign' && $method === 'POST') {
+        app_require_delivery_access($user);
         $payload = app_json_payload();
         $state = app_complete_campaign((string) ($payload['id'] ?? ''));
         app_json_response([
@@ -114,6 +117,7 @@ try {
     }
 
     if ($action === 'dispatch-due' && $method === 'POST') {
+        app_require_delivery_access($user);
         $state = app_dispatch_due_campaigns();
         app_json_response([
             'state' => $state,
@@ -137,6 +141,11 @@ try {
 
 function app_json_payload(): array
 {
+    $length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($length > 10 * 1024 * 1024) {
+        throw new RuntimeException('JSON request body is too large.');
+    }
+
     $raw = file_get_contents('php://input');
     if ($raw === false || trim($raw) === '') {
         return [];

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/platform.php';
 
-app_require_auth(true);
+$user = app_require_auth(true);
+app_require_write_access($user);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     app_json_response(['error' => 'Upload endpoint accepts POST only.'], 405);

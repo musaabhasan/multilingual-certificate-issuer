@@ -117,7 +117,7 @@ function renderCampaigns() {
           <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
           <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
           <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
-          <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}">Complete</button>
+          <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
           <a class="button" href="/queue.html">Queue details</a>
         </div>
       </article>
@@ -134,9 +134,9 @@ campaignForm.addEventListener("submit", (event) => {
     name,
     templateId: campaignTemplate.value,
     status: document.querySelector("#campaignStatus").value,
-    scheduledAt: document.querySelector("#campaignStart").value,
-    windowStartAt: document.querySelector("#campaignStart").value,
-    windowEndAt: document.querySelector("#campaignEnd").value,
+    scheduledAt: toIsoDateTime(document.querySelector("#campaignStart").value),
+    windowStartAt: toIsoDateTime(document.querySelector("#campaignStart").value),
+    windowEndAt: toIsoDateTime(document.querySelector("#campaignEnd").value),
     randomDelayMinSeconds: Number(document.querySelector("#campaignRandomMin").value || 0),
     randomDelayMaxSeconds: Number(document.querySelector("#campaignRandomMax").value || 0),
     throttleSeconds: Number(document.querySelector("#campaignRandomMin").value || 60),
@@ -407,6 +407,12 @@ function shortTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function toIsoDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function escapeHtml(value) {

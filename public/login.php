@@ -19,6 +19,7 @@ if (app_current_user() !== null && !$setupRequired) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($setupRequired) {
+            app_enforce_rate_limit('setup', app_client_ip(), 5, 900);
             $password = (string) ($_POST['password'] ?? '');
             $confirm = (string) ($_POST['confirm_password'] ?? '');
             if ($password !== $confirm) {
@@ -40,7 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        app_login((string) ($_POST['email'] ?? ''), (string) ($_POST['password'] ?? ''));
+        $email = (string) ($_POST['email'] ?? '');
+        app_enforce_rate_limit('login', app_client_ip() . ':' . strtolower(trim($email)), 8, 900);
+        app_login($email, (string) ($_POST['password'] ?? ''));
         header('Location: ' . $next);
         exit;
     } catch (Throwable $exception) {

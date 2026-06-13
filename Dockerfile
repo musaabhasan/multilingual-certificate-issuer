@@ -21,7 +21,7 @@ COPY composer.json ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts
 
 COPY . .
-RUN mkdir -p storage/certificates storage/uploads storage/logs storage/private \
+RUN mkdir -p storage/app storage/certificates storage/uploads storage/logs storage/private \
     && chown -R www-data:www-data storage
 
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public

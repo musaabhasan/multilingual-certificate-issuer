@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Configure PHP 8.3 and MySQL 8.0 | Docker runtime, Composer project, schema | App starts locally, database initializes with `utf8mb4` |
 | Develop SMTP configuration module | Encrypted SMTP profile storage | Passwords are encrypted before database write |
-| Implement authentication and MFA | Users, roles, TOTP, password rotation | Administrators require MFA and password age is enforced |
+| Implement authentication and roles | Users, roles, password rotation | Administrators use strong passwords and password age is enforced |
 | Add audit foundation | `audit_log` table and logger | Security-sensitive actions create audit records |
 
 ## Phase 2: Visual Designer And Template Engine
@@ -39,7 +39,7 @@
 
 ## Definition Of Done
 
-- MFA enforced for administrators.
+- Strong administrator password policy enforced.
 - SMTP credentials encrypted.
 - PDF files generated outside public root.
 - Arabic and English samples pass visual inspection.
