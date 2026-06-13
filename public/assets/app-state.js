@@ -1,5 +1,7 @@
 (function () {
   const storageKey = "certificateIssuerState";
+  let cachedState = null;
+  let cachedSettings = null;
 
   const seedState = {
     templates: [
@@ -107,8 +109,29 @@
   }
 
   function loadState() {
+    if (cachedState) {
+      return clone(cachedState);
+    }
+
     try {
-      const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
+      const response = serverRequest("GET", "state");
+      const serverState = migrateState(response.state || seedState);
+      const localState = readLocalState();
+      if (localState && shouldImportLocalState(serverState, localState)) {
+        cachedState = migrateState(localState);
+        cachedSettings = response.settings || null;
+        saveState(cachedState);
+        return clone(cachedState);
+      }
+      cachedState = serverState;
+      cachedSettings = response.settings || null;
+      return clone(cachedState);
+    } catch (error) {
+      console.warn("Server campaign state could not be loaded", error);
+    }
+
+    try {
+      const parsed = readLocalState();
       if (parsed && Array.isArray(parsed.templates) && Array.isArray(parsed.campaigns)) {
         const migrated = migrateState(parsed);
         saveState(migrated);
@@ -123,7 +146,58 @@
   }
 
   function saveState(state) {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    const normalized = migrateState(state);
+    try {
+      const response = serverRequest("POST", "state", normalized);
+      cachedState = migrateState(response.state || normalized);
+      cachedSettings = response.settings || cachedSettings;
+      return;
+    } catch (error) {
+      console.warn("Server campaign state could not be saved", error);
+    }
+
+    cachedState = clone(normalized);
+    localStorage.setItem(storageKey, JSON.stringify(normalized));
+  }
+
+  function readLocalState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(storageKey) || "null");
+      return parsed && Array.isArray(parsed.templates) && Array.isArray(parsed.campaigns) ? parsed : null;
+    } catch (error) {
+      console.warn("Local campaign state could not be loaded", error);
+      return null;
+    }
+  }
+
+  function shouldImportLocalState(serverState, localState) {
+    const serverCampaigns = serverState.campaigns?.length || 0;
+    const localCampaigns = localState.campaigns?.length || 0;
+    const serverTemplates = serverState.templates?.length || 0;
+    const localTemplates = localState.templates?.length || 0;
+    return (serverCampaigns === 0 && localCampaigns > 0) || localTemplates > serverTemplates;
+  }
+
+  function serverRequest(method, action, payload = {}) {
+    if (!window.CertificateIssuerAuth) {
+      throw new Error("Authentication client is unavailable.");
+    }
+    return window.CertificateIssuerAuth.syncApi(method, action, payload);
+  }
+
+  function applyServerState(response) {
+    if (response.state) {
+      cachedState = migrateState(response.state);
+      localStorage.setItem(storageKey, JSON.stringify(cachedState));
+    }
+    if (response.settings) {
+      cachedSettings = response.settings;
+    }
+    return clone(cachedState || seedState);
+  }
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
   }
 
   function slug(value) {
@@ -218,7 +292,7 @@
       randomDelayMinSeconds: randomMin,
       randomDelayMaxSeconds: Math.max(randomMin, randomMax),
       emailSubject: campaign.emailSubject || "Your certificate is ready",
-      emailBodyHtml: campaign.emailBodyHtml || "<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p>",
+      emailBodyHtml: campaign.emailBodyHtml || "<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
       attachPdf: true,
       recipientQueue,
       deliveryEvents: Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents.slice(-80) : []
@@ -231,6 +305,24 @@
 
   function campaigns() {
     return getState().campaigns;
+  }
+
+  function settings() {
+    if (cachedSettings) {
+      return clone(cachedSettings);
+    }
+
+    try {
+      const response = serverRequest("GET", "settings");
+      cachedSettings = response.settings || null;
+    } catch (error) {
+      console.warn("Settings could not be loaded", error);
+    }
+
+    return clone(cachedSettings || {
+      platform: { name: "Certificate Issuer", publicBaseUrl: window.location.origin },
+      smtp: { deliveryMode: "log", profileName: "Institution SMTP", host: "", port: 587, encryption: "tls", username: "", fromAddress: "", fromName: "Certificate Issuer", hasPassword: false }
+    });
   }
 
   function findTemplate(id) {
@@ -376,182 +468,33 @@
   }
 
   function manualSendOne(id) {
-    const campaign = findCampaign(id);
-    if (!campaign) return null;
-    const normalized = normalizeCampaign(campaign);
-    const plan = deliveryPlan(campaign);
-    const recipientQueue = normalized.recipientQueue.slice();
-    const nextRecipient = recipientQueue.find((record) => !["sent", "failed", "skipped"].includes(record.status));
-    let sent = Math.min(Number(normalized.sent || 0) + 1, plan.recipients);
-    let message = `Certificate email ${sent} sent with certificate.pdf attached.`;
-
-    if (nextRecipient) {
-      nextRecipient.status = "sent";
-      nextRecipient.renderedAt = nextRecipient.renderedAt || new Date().toISOString();
-      nextRecipient.sentAt = new Date().toISOString();
-      nextRecipient.certificatePath = nextRecipient.certificatePath || certificatePathFor(normalized, nextRecipient);
-      const counts = queueCounts(recipientQueue);
-      sent = counts.sent;
-      message = `Certificate ${nextRecipient.sequence} sent to ${nextRecipient.email || nextRecipient.displayName} with certificate.pdf attached.`;
+    try {
+      const state = applyServerState(serverRequest("POST", "send-one", { id }));
+      return state.campaigns.find((campaign) => campaign.id === id) || null;
+    } catch (error) {
+      console.warn("Server send failed", error);
+      return findCampaign(id);
     }
-
-    const status = sent >= plan.recipients && plan.recipients > 0 ? "completed" : "running";
-    const counts = recipientQueue.length > 0 ? queueCounts(recipientQueue) : null;
-
-    return saveCampaign({
-      ...normalized,
-      status,
-      recipientQueue,
-      rendered: counts?.rendered ?? normalized.rendered,
-      sent: counts?.sent ?? sent,
-      failed: counts?.failed ?? normalized.failed,
-      completedAt: status === "completed" ? new Date().toISOString() : normalized.completedAt,
-      deliveryEvents: addDeliveryEvent(normalized, message)
-    });
   }
 
   function completeCampaign(id) {
-    const campaign = findCampaign(id);
-    if (!campaign) return null;
-    const normalized = normalizeCampaign(campaign);
-    const referenceDate = new Date();
-    const recipientQueue = normalized.recipientQueue.slice();
-    const events = normalized.deliveryEvents.slice();
-
-    if (recipientQueue.length > 0) {
-      for (const recipient of recipientQueue) {
-        if (["sent", "failed", "skipped"].includes(recipient.status)) continue;
-        recipient.status = "sent";
-        recipient.renderedAt = recipient.renderedAt || referenceDate.toISOString();
-        recipient.sentAt = referenceDate.toISOString();
-        recipient.certificatePath = recipient.certificatePath || certificatePathFor(normalized, recipient);
-        events.push({
-          at: referenceDate.toISOString(),
-          message: `Certificate ${recipient.sequence} marked sent to ${recipient.email || recipient.displayName}.`
-        });
-      }
-
-      const counts = queueCounts(recipientQueue);
-      return saveCampaign({
-        ...normalized,
-        status: "completed",
-        recipientQueue,
-        rendered: counts.rendered,
-        sent: counts.sent,
-        failed: counts.failed,
-        completedAt: referenceDate.toISOString(),
-        deliveryEvents: addDeliveryEvent({ ...normalized, deliveryEvents: events.slice(-79) }, "Campaign delivery completed.", referenceDate)
-      });
+    try {
+      const state = applyServerState(serverRequest("POST", "complete-campaign", { id }));
+      return state.campaigns.find((campaign) => campaign.id === id) || null;
+    } catch (error) {
+      console.warn("Server campaign completion failed", error);
+      return findCampaign(id);
     }
-
-    return saveCampaign({
-      ...normalized,
-      status: "completed",
-      sent: Number(normalized.recipients || 0),
-      rendered: Number(normalized.recipients || 0),
-      completedAt: referenceDate.toISOString(),
-      deliveryEvents: addDeliveryEvent(normalized, "Campaign delivery completed.", referenceDate)
-    });
   }
 
   function syncDeliveryProgress(referenceDate = new Date()) {
-    const state = getState();
-    let changed = false;
-
-    state.campaigns = state.campaigns.map((campaign) => {
-      const normalized = normalizeCampaign(campaign);
-      if (!["scheduled", "running"].includes(normalized.status)) return normalized;
-      let campaignChanged = false;
-
-      const plan = deliveryPlan(normalized);
-      if (!plan.start || plan.recipients === 0) return normalized;
-
-      const referenceTime = referenceDate.getTime();
-      const startTime = plan.start.getTime();
-      const endTime = plan.end?.getTime();
-
-      if (normalized.status === "scheduled" && referenceTime >= startTime) {
-        normalized.status = "running";
-        normalized.deliveryEvents = addDeliveryEvent(normalized, "Campaign delivery window opened.", referenceDate);
-        changed = true;
-        campaignChanged = true;
-      }
-
-      if (referenceTime < startTime || normalized.status !== "running") {
-        return normalized;
-      }
-
-      const currentSent = Number(normalized.sent || 0);
-      let dueSent;
-
-      if (endTime && referenceTime >= endTime) {
-        dueSent = plan.recipients;
-      } else {
-        const elapsedSeconds = Math.floor((referenceTime - startTime) / 1000);
-        dueSent = Math.min(plan.recipients, Math.floor(elapsedSeconds / plan.calculatedSpacingSeconds) + 1);
-      }
-
-      if (dueSent > currentSent) {
-        const events = normalized.deliveryEvents.slice();
-        const recipientQueue = normalized.recipientQueue.slice();
-        let sentIndex = currentSent + 1;
-
-        if (recipientQueue.length > 0) {
-          for (const recipient of recipientQueue) {
-            if (sentIndex > dueSent) break;
-            if (["sent", "failed", "skipped"].includes(recipient.status)) continue;
-
-            recipient.status = "sent";
-            recipient.renderedAt = recipient.renderedAt || referenceDate.toISOString();
-            recipient.sentAt = referenceDate.toISOString();
-            recipient.certificatePath = recipient.certificatePath || certificatePathFor(normalized, recipient);
-            events.push({
-              at: referenceDate.toISOString(),
-              message: `Certificate ${recipient.sequence} sent to ${recipient.email || recipient.displayName} with certificate.pdf attached.`
-            });
-            sentIndex += 1;
-          }
-
-          const counts = queueCounts(recipientQueue);
-          normalized.recipientQueue = recipientQueue;
-          normalized.rendered = counts.rendered;
-          normalized.sent = counts.sent;
-          normalized.failed = counts.failed;
-        } else {
-          for (; sentIndex <= dueSent; sentIndex += 1) {
-            events.push({
-              at: referenceDate.toISOString(),
-              message: `Certificate email ${sentIndex} sent with certificate.pdf attached.`
-            });
-          }
-          normalized.sent = dueSent;
-        }
-
-        normalized.deliveryEvents = events.slice(-80);
-        changed = true;
-        campaignChanged = true;
-      }
-
-      if (normalized.sent >= plan.recipients && plan.recipients > 0) {
-        normalized.status = "completed";
-        normalized.completedAt = referenceDate.toISOString();
-        normalized.deliveryEvents = addDeliveryEvent(normalized, "Campaign delivery completed.", referenceDate);
-        changed = true;
-        campaignChanged = true;
-      }
-
-      if (campaignChanged) {
-        normalized.updatedAt = referenceDate.toISOString();
-      }
-
-      return normalized;
-    });
-
-    if (changed) {
-      saveState(state);
+    void referenceDate;
+    try {
+      return applyServerState(serverRequest("POST", "dispatch-due", {}));
+    } catch (error) {
+      console.warn("Server dispatch could not run", error);
+      return getState();
     }
-
-    return state;
   }
 
   function addDeliveryEvent(campaign, message, date = new Date()) {
@@ -559,10 +502,6 @@
       ...(Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents : []),
       { at: date.toISOString(), message }
     ].slice(-80);
-  }
-
-  function certificatePathFor(campaign, recipient) {
-    return `storage/certificates/${campaign.id}/${slug(recipient.identifier || recipient.email || recipient.id)}.pdf`;
   }
 
   function toDateTimeLocal(date) {
@@ -629,6 +568,7 @@
 
   window.CertificateIssuerStore = {
     getState,
+    settings,
     templates,
     campaigns,
     findTemplate,

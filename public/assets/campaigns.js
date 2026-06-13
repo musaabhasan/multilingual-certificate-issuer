@@ -142,7 +142,7 @@ campaignForm.addEventListener("submit", (event) => {
     throttleSeconds: Number(document.querySelector("#campaignRandomMin").value || 60),
     smtpProfile: document.querySelector("#campaignSmtp").value.trim() || "Institution SMTP",
     emailSubject: document.querySelector("#campaignEmailSubject").value.trim() || "Your certificate is ready",
-    emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p>",
+    emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
     attachPdf: true,
     recipients: 0,
     rendered: 0,
@@ -171,7 +171,7 @@ campaignList.addEventListener("click", (event) => {
     const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
     store.updateCampaign(button.dataset.id, {
       emailSubject: subject || "Your certificate is ready",
-      emailBodyHtml: body || "<p>Your certificate is attached as a PDF.</p>",
+      emailBodyHtml: body || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
       attachPdf: true
     });
   } else {

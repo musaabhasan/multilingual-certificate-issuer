@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/platform.php';
+
+app_require_auth();
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -20,6 +24,8 @@ declare(strict_types=1);
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
+        <a href="/admin.php">Admin</a>
+        <a href="/logout.php">Logout</a>
     </nav>
 </header>
 
@@ -74,13 +80,13 @@ declare(strict_types=1);
         <article class="panel">
             <div class="panel-header">
                 <h2>Security posture</h2>
-                <span class="status locked">MFA enforced</span>
+                <span class="status ready">Login active</span>
             </div>
             <ul class="check-list">
-                <li>SMTP credentials encrypted</li>
-                <li>Generated PDFs stored privately</li>
+                <li>Username and password required for management pages</li>
+                <li>SMTP password encrypted at rest</li>
+                <li>Uploads and API changes protected by CSRF tokens</li>
                 <li>Admin action audit enabled</li>
-                <li>Password rotation policy active</li>
             </ul>
         </article>
 
@@ -91,11 +97,7 @@ declare(strict_types=1);
             </div>
             <table class="compact-table">
                 <thead><tr><th>Status</th><th>Recipient</th><th>Time</th></tr></thead>
-                <tbody>
-                <tr><td><span class="pill sent">Sent</span></td><td>aisha@example.edu</td><td>09:12</td></tr>
-                <tr><td><span class="pill queued">Queued</span></td><td>omar@example.edu</td><td>09:13</td></tr>
-                <tr><td><span class="pill failed">Retry</span></td><td>fatima@example.edu</td><td>09:14</td></tr>
-                </tbody>
+                <tbody id="dashboardRecentEvents"><tr><td colspan="3">No queue events yet.</td></tr></tbody>
             </table>
         </article>
 
@@ -113,6 +115,7 @@ declare(strict_types=1);
         </article>
     </section>
 </main>
+<script src="/assets/app-auth.js"></script>
 <script src="/assets/app-state.js"></script>
 <script src="/assets/dashboard.js"></script>
 </body>

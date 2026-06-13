@@ -15,8 +15,18 @@ function renderQueue() {
   document.querySelector("#queueFailed").textContent = String(summary.failed);
   document.querySelector("#queueSpacing").textContent = queueStore.formatDuration(slowestSpacing);
   document.querySelector("#queueWorkerStatus").textContent = `${summary.activeCampaigns} active lanes`;
+  renderSmtpProfile();
 
   queueCampaignList.innerHTML = campaigns.map((campaign) => renderCampaignQueue(campaign)).join("");
+}
+
+function renderSmtpProfile() {
+  const smtp = queueStore.settings().smtp || {};
+  document.querySelector("#smtpMode").textContent = smtp.deliveryMode === "smtp" ? "SMTP sending" : "Render and log locally";
+  document.querySelector("#smtpHost").textContent = smtp.host ? `${smtp.host}:${smtp.port || 587}` : "Not configured";
+  document.querySelector("#smtpEncryption").textContent = (smtp.encryption || "tls").toUpperCase();
+  document.querySelector("#smtpCredential").textContent = smtp.hasPassword ? "Encrypted password saved" : "No password saved";
+  document.querySelector("#smtpFrom").textContent = smtp.fromAddress || "Not configured";
 }
 
 function renderCampaignQueue(campaign) {
@@ -109,6 +119,7 @@ queueCampaignList.addEventListener("click", (event) => {
 function nextSendLabel(campaign, plan) {
   if (campaign.status === "completed") return "Done";
   if (campaign.status === "paused") return "Paused";
+  if (campaign.nextSendAfterAt) return shortTime(campaign.nextSendAfterAt);
   if (!plan.start || plan.recipients === 0) return "Not scheduled";
   if (Number(campaign.sent || 0) >= plan.recipients) return "Done";
 

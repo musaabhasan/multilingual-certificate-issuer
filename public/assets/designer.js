@@ -371,6 +371,9 @@ async function uploadAsset(file, category) {
 
   const response = await fetch("/upload-asset.php", {
     method: "POST",
+    headers: {
+      "X-CSRF-Token": window.CertificateIssuerAuth?.csrfToken || ""
+    },
     body: formData
   });
   const payload = await response.json().catch(() => ({}));

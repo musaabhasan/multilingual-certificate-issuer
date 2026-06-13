@@ -15,6 +15,8 @@
         <a href="/import.html">Import</a>
         <a href="/queue.html" aria-current="page">Queue</a>
         <a href="/verify.php">Verify</a>
+        <a href="/admin.php">Admin</a>
+        <a href="/logout.php">Logout</a>
     </nav>
 </header>
 <main class="shell">
@@ -49,14 +51,16 @@
         <article class="panel">
             <h2>SMTP profile</h2>
             <dl class="detail-list">
-                <div><dt>Host</dt><dd>smtp.example.edu</dd></div>
-                <div><dt>Encryption</dt><dd>TLS</dd></div>
-                <div><dt>Credential</dt><dd>Encrypted</dd></div>
-                <div><dt>From</dt><dd>certificates@example.edu</dd></div>
+                <div><dt>Mode</dt><dd id="smtpMode">Loading</dd></div>
+                <div><dt>Host</dt><dd id="smtpHost">Loading</dd></div>
+                <div><dt>Encryption</dt><dd id="smtpEncryption">Loading</dd></div>
+                <div><dt>Credential</dt><dd id="smtpCredential">Loading</dd></div>
+                <div><dt>From</dt><dd id="smtpFrom">Loading</dd></div>
             </dl>
         </article>
     </section>
 </main>
+<script src="/assets/app-auth.js"></script>
 <script src="/assets/app-state.js"></script>
 <script src="/assets/queue.js"></script>
 </body>

@@ -22,12 +22,36 @@ function renderDashboard() {
       <div class="mini-list-row">
         <div>
           <strong>${escapeHtml(campaign.name)}</strong>
-          <span>${escapeHtml(template?.name || "No template")} · ${pending} pending · ${Number(campaign.sent || 0)} sent</span>
+          <span>${escapeHtml(template?.name || "No template")} - ${pending} pending - ${Number(campaign.sent || 0)} sent</span>
         </div>
         <span class="${dashboardStore.statusClass(campaign.status)}">${dashboardStore.statusLabel(campaign.status)}</span>
       </div>
     `;
   }).join("") || "<p>No active campaigns yet.</p>";
+
+  const recentEvents = dashboardStore.campaigns()
+    .flatMap((campaign) => (campaign.deliveryEvents || []).map((event) => ({ ...event, campaign })))
+    .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
+    .slice(0, 5);
+
+  document.querySelector("#dashboardRecentEvents").innerHTML = recentEvents.map((event) => `
+    <tr>
+      <td><span class="${event.message.includes("failed") ? "pill failed" : "pill sent"}">${event.message.includes("failed") ? "Failed" : "Event"}</span></td>
+      <td>${escapeHtml(event.campaign.name)}</td>
+      <td>${escapeHtml(shortTime(event.at))}</td>
+    </tr>
+  `).join("") || "<tr><td colspan=\"3\">No queue events yet.</td></tr>";
+}
+
+function shortTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || "";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function escapeHtml(value) {
