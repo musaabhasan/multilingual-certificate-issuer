@@ -20,6 +20,10 @@ const campaignCsvPreview = document.querySelector("#campaignCsvPreview");
 const campaignSearch = document.querySelector("#campaignSearch");
 const campaignStatusFilter = document.querySelector("#campaignStatusFilter");
 const campaignSort = document.querySelector("#campaignSort");
+const campaignCleanupMode = document.querySelector("#campaignCleanupMode");
+const campaignCleanupAge = document.querySelector("#campaignCleanupAge");
+const campaignCleanupSummary = document.querySelector("#campaignCleanupSummary");
+const deleteOldCampaignRecords = document.querySelector("#deleteOldCampaignRecords");
 const setCampaignStartNow = document.querySelector("#setCampaignStartNow");
 const clearCampaignEnd = document.querySelector("#clearCampaignEnd");
 const campaignEmailSubject = document.querySelector("#campaignEmailSubject");
@@ -318,6 +322,7 @@ function disabledTitle(message) {
 function renderCampaigns() {
   const allCampaigns = store.campaigns();
   const campaigns = filteredCampaigns(allCampaigns);
+  renderCampaignCleanup();
   campaignLaneStatus.textContent = campaigns.length === allCampaigns.length
     ? `${allCampaigns.length} campaigns`
     : `${campaigns.length} of ${allCampaigns.length}`;
@@ -369,6 +374,7 @@ function renderCampaigns() {
             <span class="${store.statusClass(campaign.status)}">${store.statusLabel(campaign.status)}</span>
             <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
             <button type="button" data-action="${primaryAction}" data-id="${escapeHtml(campaign.id)}" ${startBlockedAttribute}>${primaryActionLabel}</button>
+            <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete record</button>
             <button type="button" data-action="toggle-details" data-id="${escapeHtml(campaign.id)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "Hide details" : "Open details"}</button>
           </div>
         </div>
@@ -732,6 +738,7 @@ campaignList.addEventListener("click", async (event) => {
         return;
       }
       store.deleteCampaign(button.dataset.id);
+      forgetCampaignUiState([button.dataset.id]);
       render();
       setCampaignLaneStatus("Campaign deleted", "ready");
     } else if (button.dataset.action === "save-schedule") {
@@ -957,6 +964,31 @@ document.addEventListener("focusin", (event) => {
   control.addEventListener("input", renderCampaigns);
 });
 
+[campaignCleanupMode, campaignCleanupAge].forEach((control) => {
+  control.addEventListener("input", renderCampaignCleanup);
+});
+
+deleteOldCampaignRecords.addEventListener("click", () => {
+  const candidates = campaignCleanupCandidates();
+  if (candidates.length === 0) {
+    setCampaignLaneStatus("No old campaign records match the cleanup selection.", "locked");
+    return;
+  }
+
+  const names = candidates.slice(0, 5).map((campaign) => campaign.name || campaign.id).join(", ");
+  const suffix = candidates.length > 5 ? ` and ${candidates.length - 5} more` : "";
+  if (!window.confirm(`Delete ${candidates.length} campaign record${candidates.length === 1 ? "" : "s"}: ${names}${suffix}? This removes them from Campaigns and Queue.`)) {
+    setCampaignLaneStatus("Cleanup cancelled", "locked");
+    return;
+  }
+
+  const ids = candidates.map((campaign) => campaign.id);
+  const deleted = store.deleteCampaigns(ids);
+  forgetCampaignUiState(ids);
+  render();
+  setCampaignLaneStatus(`Deleted ${deleted.length} old campaign record${deleted.length === 1 ? "" : "s"}`, "ready");
+});
+
 setCampaignStartNow.addEventListener("click", () => {
   document.querySelector("#campaignStart").value = toDateTimeInput(new Date());
   renderPlanPreview();
@@ -1069,6 +1101,52 @@ function filteredCampaigns(campaigns) {
     .sort((left, right) => compareCampaigns(left, right, sort));
 }
 
+function renderCampaignCleanup() {
+  const candidates = campaignCleanupCandidates();
+  const modeLabel = campaignCleanupMode.options[campaignCleanupMode.selectedIndex]?.textContent || "selected scope";
+  const ageLabel = campaignCleanupAge.value === "0"
+    ? ""
+    : ` ${campaignCleanupAge.options[campaignCleanupAge.selectedIndex]?.textContent.toLowerCase() || ""}`;
+
+  campaignCleanupSummary.textContent = candidates.length === 0
+    ? `No ${modeLabel.toLowerCase()}${ageLabel} are available to delete.`
+    : `${candidates.length} ${modeLabel.toLowerCase()}${ageLabel} ready for cleanup.`;
+  deleteOldCampaignRecords.disabled = candidates.length === 0;
+}
+
+function campaignCleanupCandidates() {
+  const campaigns = campaignCleanupMode.value === "filtered_non_active"
+    ? filteredCampaigns(store.campaigns())
+    : store.campaigns();
+  const mode = campaignCleanupMode.value;
+  const ageDays = Number(campaignCleanupAge.value || 0);
+  const cutoff = ageDays > 0 ? Date.now() - ageDays * 24 * 60 * 60 * 1000 : 0;
+
+  return campaigns.filter((campaign) => {
+    if (!campaign.id) return false;
+    if (["running", "scheduled"].includes(campaign.status)) return false;
+    if (mode === "completed" && campaign.status !== "completed") return false;
+    if (mode === "paused_completed" && !["paused", "completed"].includes(campaign.status)) return false;
+    if (mode === "non_active" && ["running", "scheduled"].includes(campaign.status)) return false;
+    if (mode === "filtered_non_active" && ["running", "scheduled"].includes(campaign.status)) return false;
+
+    if (cutoff > 0) {
+      const referenceTime = campaignReferenceTime(campaign);
+      if (referenceTime === 0 || referenceTime > cutoff) return false;
+    }
+
+    return true;
+  });
+}
+
+function campaignReferenceTime(campaign) {
+  return sortableTime(campaign.completedAt)
+    || sortableTime(campaign.updatedAt)
+    || sortableTime(campaign.windowStartAt)
+    || sortableTime(campaign.scheduledAt)
+    || 0;
+}
+
 function compareCampaigns(left, right, sort) {
   if (sort === "name_asc") {
     return String(left.name || "").localeCompare(String(right.name || ""));
@@ -1087,6 +1165,16 @@ function compareCampaigns(left, right, sort) {
 
 function pendingCount(campaign) {
   return store.campaignCounts(campaign).pending;
+}
+
+function forgetCampaignUiState(ids) {
+  const idSet = new Set(ids.map(String));
+  idSet.forEach((id) => {
+    recipientFilters.delete(id);
+    expandedCampaigns.delete(id);
+    csvEditors.delete(id);
+    campaignTabs.delete(id);
+  });
 }
 
 function filterRecipients(recipients, query) {

@@ -243,6 +243,29 @@
                     </select>
                 </label>
             </div>
+            <div class="record-cleanup" aria-label="Delete old campaign records">
+                <div>
+                    <strong>Old campaign records</strong>
+                    <span id="campaignCleanupSummary">No records selected for deletion.</span>
+                </div>
+                <label>Delete scope
+                    <select id="campaignCleanupMode">
+                        <option value="completed">Completed only</option>
+                        <option value="paused_completed">Paused and completed</option>
+                        <option value="non_active">Draft, paused, and completed</option>
+                        <option value="filtered_non_active">Displayed non-active records</option>
+                    </select>
+                </label>
+                <label>Age
+                    <select id="campaignCleanupAge">
+                        <option value="0">Any age</option>
+                        <option value="7">Older than 7 days</option>
+                        <option value="30">Older than 30 days</option>
+                        <option value="90">Older than 90 days</option>
+                    </select>
+                </label>
+                <button id="deleteOldCampaignRecords" class="danger" type="button" disabled>Delete records</button>
+            </div>
             <div id="campaignList" class="campaign-grid"></div>
         </article>
     </section>

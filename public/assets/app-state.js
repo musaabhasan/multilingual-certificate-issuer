@@ -513,6 +513,19 @@
     return campaign;
   }
 
+  function deleteCampaigns(ids) {
+    const idSet = new Set((Array.isArray(ids) ? ids : []).map(String));
+    if (idSet.size === 0) return [];
+
+    const state = getState();
+    const deleted = state.campaigns.filter((item) => idSet.has(String(item.id || "")));
+    if (deleted.length === 0) return [];
+
+    state.campaigns = state.campaigns.filter((item) => !idSet.has(String(item.id || "")));
+    saveState(state);
+    return deleted;
+  }
+
   function updateCampaignSchedule(id, updates) {
     const campaign = findCampaign(id);
     if (!campaign) return null;
@@ -1106,6 +1119,7 @@
     createCampaign,
     updateCampaign,
     deleteCampaign,
+    deleteCampaigns,
     updateCampaignSchedule,
     campaignCounts,
     attachImportToCampaign,

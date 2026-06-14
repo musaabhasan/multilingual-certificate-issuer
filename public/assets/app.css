@@ -754,6 +754,33 @@ code {
     grid-template-columns: minmax(260px, 1fr) 180px 180px;
 }
 
+.record-cleanup {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 210px 190px auto;
+    gap: 12px;
+    align-items: end;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+    padding: 12px;
+    margin-bottom: 14px;
+    background: #fbfbfb;
+}
+
+.record-cleanup > div:first-child {
+    align-self: center;
+}
+
+.record-cleanup strong,
+.record-cleanup span {
+    display: block;
+}
+
+.record-cleanup span {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .panel h2 {
     margin: 0;
     font-size: 18px;
@@ -2001,6 +2028,7 @@ textarea.short-textarea {
     .campaign-grid,
     .campaign-summary-strip,
     .list-toolbar,
+    .record-cleanup,
     .preview-grid,
     .mfa-setup-grid {
         grid-template-columns: 1fr;
