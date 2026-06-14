@@ -1,8 +1,11 @@
 const queueStore = window.CertificateIssuerStore;
 const queueCampaignList = document.querySelector("#queueCampaignList");
+const queueWorkerStatus = document.querySelector("#queueWorkerStatus");
+const processDueQueue = document.querySelector("#processDueQueue");
+const refreshQueue = document.querySelector("#refreshQueue");
+let queueRefreshInFlight = false;
 
 function renderQueue() {
-  queueStore.syncDeliveryProgress();
   const summary = queueStore.summary();
   const campaigns = queueStore.campaigns();
   const activePlans = campaigns
@@ -14,10 +17,16 @@ function renderQueue() {
   document.querySelector("#queueSent").textContent = String(summary.sent);
   document.querySelector("#queueFailed").textContent = String(summary.failed);
   document.querySelector("#queueSpacing").textContent = queueStore.formatDuration(slowestSpacing);
-  document.querySelector("#queueWorkerStatus").textContent = `${summary.activeCampaigns} active lanes`;
+  queueWorkerStatus.textContent = `${summary.activeCampaigns} active lanes`;
+  queueWorkerStatus.className = "status ready";
   renderSmtpProfile();
 
   queueCampaignList.innerHTML = campaigns.map((campaign) => renderCampaignQueue(campaign)).join("");
+}
+
+function setQueueStatus(text, state = "ready") {
+  queueWorkerStatus.textContent = text;
+  queueWorkerStatus.className = `status ${state}`;
 }
 
 function renderSmtpProfile() {
@@ -99,22 +108,67 @@ function renderCampaignQueue(campaign) {
   `;
 }
 
-queueCampaignList.addEventListener("click", (event) => {
+async function refreshQueueState() {
+  if (queueRefreshInFlight) return;
+  queueRefreshInFlight = true;
+
+  try {
+    await queueStore.refreshState();
+    renderQueue();
+  } finally {
+    queueRefreshInFlight = false;
+  }
+}
+
+async function processDueRecipients() {
+  processDueQueue.disabled = true;
+  setQueueStatus("Processing due recipients", "pending");
+
+  try {
+    await queueStore.dispatchDueCampaigns();
+    renderQueue();
+    setQueueStatus("Due queue processed", "ready");
+  } catch (error) {
+    setQueueStatus(error.message, "warning");
+  } finally {
+    processDueQueue.disabled = false;
+  }
+}
+
+queueCampaignList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
-  if (button.dataset.action === "running") {
-    queueStore.startCampaign(button.dataset.id);
-  } else if (button.dataset.action === "send-one") {
-    queueStore.manualSendOne(button.dataset.id);
-  } else if (button.dataset.action === "completed") {
-    queueStore.completeCampaign(button.dataset.id);
-  } else {
-    queueStore.updateCampaign(button.dataset.id, { status: button.dataset.action });
-  }
+  button.disabled = true;
+  setQueueStatus("Updating campaign", "pending");
 
-  renderQueue();
+  try {
+    if (button.dataset.action === "running") {
+      await queueStore.updateCampaignStatusAsync(button.dataset.id, "running");
+      renderQueue();
+      setQueueStatus("Campaign started", "ready");
+    } else if (button.dataset.action === "send-one") {
+      await queueStore.manualSendOneAsync(button.dataset.id);
+      renderQueue();
+      setQueueStatus("One due recipient processed", "ready");
+    } else if (button.dataset.action === "completed") {
+      await queueStore.completeCampaignAsync(button.dataset.id);
+      renderQueue();
+      setQueueStatus("Campaign closed", "ready");
+    } else {
+      await queueStore.updateCampaignStatusAsync(button.dataset.id, button.dataset.action);
+      renderQueue();
+      setQueueStatus("Campaign updated", "ready");
+    }
+  } catch (error) {
+    setQueueStatus(error.message, "warning");
+  } finally {
+    button.disabled = false;
+  }
 });
+
+processDueQueue.addEventListener("click", processDueRecipients);
+refreshQueue.addEventListener("click", refreshQueueState);
 
 function nextSendLabel(campaign, plan) {
   if (campaign.status === "completed") return "Done";
@@ -154,4 +208,5 @@ function escapeHtml(value) {
 }
 
 renderQueue();
-setInterval(renderQueue, 5000);
+void refreshQueueState();
+setInterval(refreshQueueState, 5000);

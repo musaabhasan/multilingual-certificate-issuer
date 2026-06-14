@@ -1043,6 +1043,49 @@ function app_recipient_status_counts(array $queue): array
     ];
 }
 
+function app_update_campaign_status(string $campaignId, string $status): array
+{
+    $status = strtolower(trim($status));
+    if (!in_array($status, ['draft', 'scheduled', 'running', 'paused'], true)) {
+        throw new RuntimeException('Unsupported campaign status.');
+    }
+
+    $state = app_state();
+    $found = app_find_campaign($state, $campaignId);
+    if ($found === null) {
+        throw new RuntimeException('Campaign not found.');
+    }
+
+    $campaign = $found['campaign'];
+    $previousStatus = (string) ($campaign['status'] ?? 'draft');
+    $campaign['status'] = $status;
+
+    if ($status === 'running' && trim((string) ($campaign['windowStartAt'] ?? '')) === '') {
+        $campaign['windowStartAt'] = app_now();
+        $campaign['scheduledAt'] = $campaign['windowStartAt'];
+    }
+
+    $eventMessages = [
+        'draft' => 'Campaign moved back to draft.',
+        'scheduled' => 'Campaign scheduled for delivery.',
+        'running' => 'Campaign started. Due recipients will be processed by the queue worker.',
+        'paused' => 'Campaign paused.',
+    ];
+
+    if ($previousStatus !== $status) {
+        $campaign['deliveryEvents'] = array_slice([
+            ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
+            ['at' => app_now(), 'message' => $eventMessages[$status]],
+        ], -80);
+    }
+
+    $campaign['updatedAt'] = app_now();
+    $state['campaigns'][$found['index']] = $campaign;
+    app_save_state($state);
+    app_audit('campaign.status_updated', 'campaign', $campaignId, ['status' => $status, 'previous_status' => $previousStatus]);
+    return app_state();
+}
+
 function app_send_one(string $campaignId): array
 {
     $state = app_state();

@@ -1,7 +1,6 @@
 const dashboardStore = window.CertificateIssuerStore;
 
 function renderDashboard() {
-  dashboardStore.syncDeliveryProgress();
   const summary = dashboardStore.summary();
   document.querySelector("#dashboardTemplates").textContent = String(summary.templates);
   document.querySelector("#dashboardApprovedTemplates").textContent = `${summary.approvedTemplates} approved`;
@@ -63,4 +62,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+async function refreshDashboard() {
+  await dashboardStore.refreshState();
+  renderDashboard();
+}
+
 renderDashboard();
+void refreshDashboard();

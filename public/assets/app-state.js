@@ -185,6 +185,13 @@
     return window.CertificateIssuerAuth.syncApi(method, action, payload);
   }
 
+  async function serverRequestAsync(method, action, payload = {}) {
+    if (!window.CertificateIssuerAuth) {
+      throw new Error("Authentication client is unavailable.");
+    }
+    return window.CertificateIssuerAuth.api(method, action, payload);
+  }
+
   function applyServerState(response) {
     if (response.state) {
       cachedState = migrateState(response.state);
@@ -194,6 +201,19 @@
       cachedSettings = response.settings;
     }
     return clone(cachedState || seedState);
+  }
+
+  async function refreshState() {
+    try {
+      return applyServerState(await serverRequestAsync("GET", "state"));
+    } catch (error) {
+      console.warn("Server campaign state could not be refreshed", error);
+      return getState();
+    }
+  }
+
+  async function serverStateAction(action, payload = {}) {
+    return applyServerState(await serverRequestAsync("POST", action, payload));
   }
 
   function clone(value) {
@@ -467,6 +487,11 @@
     return updateCampaign(id, updates);
   }
 
+  async function updateCampaignStatusAsync(id, status) {
+    const state = await serverStateAction("campaign-status", { id, status });
+    return state.campaigns.find((campaign) => campaign.id === id) || null;
+  }
+
   function manualSendOne(id) {
     try {
       const state = applyServerState(serverRequest("POST", "send-one", { id }));
@@ -475,6 +500,11 @@
       console.warn("Server send failed", error);
       return findCampaign(id);
     }
+  }
+
+  async function manualSendOneAsync(id) {
+    const state = await serverStateAction("send-one", { id });
+    return state.campaigns.find((campaign) => campaign.id === id) || null;
   }
 
   function completeCampaign(id) {
@@ -487,19 +517,23 @@
     }
   }
 
+  async function completeCampaignAsync(id) {
+    const state = await serverStateAction("complete-campaign", { id });
+    return state.campaigns.find((campaign) => campaign.id === id) || null;
+  }
+
   function syncDeliveryProgress(referenceDate = new Date()) {
     void referenceDate;
+    return getState();
+  }
+
+  async function dispatchDueCampaigns() {
     const role = window.CertificateIssuerAuth?.user?.role || "";
     if (!["administrator", "operator"].includes(role)) {
       return getState();
     }
 
-    try {
-      return applyServerState(serverRequest("POST", "dispatch-due", {}));
-    } catch (error) {
-      console.warn("Server dispatch could not run", error);
-      return getState();
-    }
+    return serverStateAction("dispatch-due", {});
   }
 
   function addDeliveryEvent(campaign, message, date = new Date()) {
@@ -572,6 +606,7 @@
 
   window.CertificateIssuerStore = {
     getState,
+    refreshState,
     settings,
     templates,
     campaigns,
@@ -586,9 +621,13 @@
     deliveryPlan,
     formatDuration,
     startCampaign,
+    updateCampaignStatusAsync,
     manualSendOne,
+    manualSendOneAsync,
     completeCampaign,
+    completeCampaignAsync,
     syncDeliveryProgress,
+    dispatchDueCampaigns,
     campaignTemplate,
     statusLabel,
     statusClass,

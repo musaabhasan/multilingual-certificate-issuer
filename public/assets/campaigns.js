@@ -29,6 +29,11 @@ const labelRoles = {
 
 let lastCampaignImport = null;
 
+function setCampaignLaneStatus(text, state = "ready") {
+  campaignLaneStatus.textContent = text;
+  campaignLaneStatus.className = `status ${state}`;
+}
+
 function renderTemplateOptions() {
   const selected = campaignTemplate.value;
   campaignTemplate.innerHTML = store.templates().map((template) => (
@@ -151,33 +156,50 @@ campaignForm.addEventListener("submit", (event) => {
     labels: []
   }, lastCampaignImport);
 
-  campaignLaneStatus.textContent = `Created ${created.name}`;
-  campaignLaneStatus.className = "status ready";
   render();
+  setCampaignLaneStatus(`Created ${created.name}`, "ready");
 });
 
-campaignList.addEventListener("click", (event) => {
+campaignList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
-  if (button.dataset.action === "running") {
-    store.startCampaign(button.dataset.id);
-  } else if (button.dataset.action === "send-one") {
-    store.manualSendOne(button.dataset.id);
-  } else if (button.dataset.action === "completed") {
-    store.completeCampaign(button.dataset.id);
-  } else if (button.dataset.action === "save-email") {
-    const subject = document.querySelector(`[data-email-subject="${cssEscape(button.dataset.id)}"]`)?.value.trim();
-    const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
-    store.updateCampaign(button.dataset.id, {
-      emailSubject: subject || "Your certificate is ready",
-      emailBodyHtml: body || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
-      attachPdf: true
-    });
-  } else {
-    store.updateCampaign(button.dataset.id, { status: button.dataset.action });
+  button.disabled = true;
+  setCampaignLaneStatus("Updating campaign", "pending");
+
+  try {
+    if (button.dataset.action === "running") {
+      await store.updateCampaignStatusAsync(button.dataset.id, "running");
+      render();
+      setCampaignLaneStatus("Campaign started. Queue worker will process due recipients.", "ready");
+    } else if (button.dataset.action === "send-one") {
+      await store.manualSendOneAsync(button.dataset.id);
+      render();
+      setCampaignLaneStatus("One due recipient processed", "ready");
+    } else if (button.dataset.action === "completed") {
+      await store.completeCampaignAsync(button.dataset.id);
+      render();
+      setCampaignLaneStatus("Campaign closed", "ready");
+    } else if (button.dataset.action === "save-email") {
+      const subject = document.querySelector(`[data-email-subject="${cssEscape(button.dataset.id)}"]`)?.value.trim();
+      const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
+      store.updateCampaign(button.dataset.id, {
+        emailSubject: subject || "Your certificate is ready",
+        emailBodyHtml: body || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
+        attachPdf: true
+      });
+      render();
+      setCampaignLaneStatus("Email content saved", "ready");
+    } else {
+      await store.updateCampaignStatusAsync(button.dataset.id, button.dataset.action);
+      render();
+      setCampaignLaneStatus("Campaign updated", "ready");
+    }
+  } catch (error) {
+    setCampaignLaneStatus(error.message, "warning");
+  } finally {
+    button.disabled = false;
   }
-  render();
 });
 
 campaignCsvFile.addEventListener("change", async () => {
@@ -204,7 +226,6 @@ campaignCsvFile.addEventListener("change", async () => {
 });
 
 function render() {
-  store.syncDeliveryProgress();
   renderTemplateOptions();
   renderMetrics();
   renderCampaigns();

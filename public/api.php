@@ -116,6 +116,20 @@ try {
         ]);
     }
 
+    if ($action === 'campaign-status' && $method === 'POST') {
+        app_require_delivery_access($user);
+        $payload = app_json_payload();
+        $state = app_update_campaign_status(
+            (string) ($payload['id'] ?? ''),
+            (string) ($payload['status'] ?? '')
+        );
+        app_json_response([
+            'state' => $state,
+            'settings' => app_public_settings(),
+            'csrf' => app_csrf_token(),
+        ]);
+    }
+
     if ($action === 'complete-campaign' && $method === 'POST') {
         app_require_delivery_access($user);
         $payload = app_json_payload();
