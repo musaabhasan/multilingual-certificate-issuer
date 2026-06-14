@@ -72,7 +72,7 @@
 
   async function api(method, action, payload) {
     const controller = new AbortController();
-    const timeoutMs = ["send-one", "dispatch-due", "settings-test-email", "settings-smtp-diagnostics"].includes(action) ? 60000 : 15000;
+    const timeoutMs = ["send-one", "dispatch-due", "campaign-preview", "settings-test-email", "settings-smtp-diagnostics"].includes(action) ? 60000 : 15000;
     const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     const options = {
       method,

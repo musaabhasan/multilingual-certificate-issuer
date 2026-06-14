@@ -129,6 +129,19 @@ try {
         ]);
     }
 
+    if ($action === 'campaign-preview' && $method === 'POST') {
+        app_require_write_access($user);
+        $payload = app_json_payload();
+        app_release_session_lock();
+        app_json_response([
+            'preview' => app_preview_campaign_recipient(
+                (string) ($payload['campaignId'] ?? ''),
+                (string) ($payload['recipientId'] ?? '')
+            ),
+            'csrf' => app_csrf_token(),
+        ]);
+    }
+
     if ($action === 'campaign-status' && $method === 'POST') {
         app_require_delivery_access($user);
         $payload = app_json_payload();

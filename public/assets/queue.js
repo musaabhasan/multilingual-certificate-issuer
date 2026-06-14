@@ -252,12 +252,16 @@ queueCampaignList.addEventListener("click", async (event) => {
   if (recipientButton) {
     queueActionInFlight = true;
     recipientButton.disabled = true;
-    setQueueStatus("Updating recipient", "pending");
+    setQueueStatus(recipientButton.dataset.recipientAction === "preview" ? "Generating preview" : "Updating recipient", "pending");
 
     try {
-      updateRecipientFromButton(recipientButton);
-      renderQueue();
-      setQueueStatus("Recipient queue updated", "ready");
+      if (recipientButton.dataset.recipientAction === "preview") {
+        await window.CertificateIssuerPreview.open(recipientButton.dataset.id, recipientButton.dataset.recipientId, setQueueStatus);
+      } else {
+        updateRecipientFromButton(recipientButton);
+        renderQueue();
+        setQueueStatus("Recipient queue updated", "ready");
+      }
     } catch (error) {
       setQueueStatus(error.message, "warning");
     } finally {
@@ -393,6 +397,7 @@ function recipientActionsMarkup(campaignId, recipient) {
 
   return `
     <div class="table-actions">
+      <button type="button" data-recipient-action="preview" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}">Preview</button>
       <button type="button" data-recipient-action="retry" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}">${retryLabel}</button>
       <button type="button" data-recipient-action="skip" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}" ${skipDisabled ? "disabled" : ""}>Skip</button>
       <button type="button" class="danger" data-recipient-action="remove" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}">Remove</button>

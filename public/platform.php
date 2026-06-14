@@ -1346,6 +1346,99 @@ function app_dispatch_due_campaigns(): array
     return app_state();
 }
 
+function app_preview_campaign_recipient(string $campaignId, string $recipientId): array
+{
+    $state = app_state();
+    $found = app_find_campaign($state, $campaignId);
+    if ($found === null) {
+        throw new RuntimeException('Campaign not found.');
+    }
+
+    $campaign = $found['campaign'];
+    $template = app_find_template($state, (string) ($campaign['templateId'] ?? ''));
+    if ($template === null) {
+        throw new RuntimeException('Campaign template not found.');
+    }
+
+    $recipient = null;
+    foreach ((is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : []) as $queueRecord) {
+        if (is_array($queueRecord) && (string) ($queueRecord['id'] ?? '') === $recipientId) {
+            $recipient = $queueRecord;
+            break;
+        }
+    }
+
+    if ($recipient === null) {
+        throw new RuntimeException('Recipient not found.');
+    }
+
+    $data = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];
+    $identifier = (string) ($recipient['identifier'] ?? $data['unique_identifier'] ?? $recipient['id'] ?? bin2hex(random_bytes(4)));
+    $verificationUrl = rtrim((string) (app_settings()['platform']['publicBaseUrl'] ?? ''), '/') . '/verify.php?certificate_number=' . rawurlencode($identifier) . '&preview=1';
+    $data['verification_token'] = 'preview';
+    $data['verification_url'] = $verificationUrl;
+    $data['certificate_number'] = $identifier;
+
+    $previewDirectory = app_storage_path('previews');
+    if (!is_dir($previewDirectory)) {
+        mkdir($previewDirectory, 0750, true);
+    }
+    app_cleanup_preview_files($previewDirectory);
+
+    $previewFile = app_slug($campaignId) . '-' . app_slug($identifier) . '-' . bin2hex(random_bytes(8)) . '.pdf';
+    $pdfPath = $previewDirectory . DIRECTORY_SEPARATOR . $previewFile;
+    $layout = new TemplateLayout(
+        page: is_array($template['layout']['page'] ?? null) ? $template['layout']['page'] : ['width' => 297, 'height' => 210, 'orientation' => 'landscape'],
+        background: isset($template['layout']['background']) ? (string) $template['layout']['background'] : null,
+        backgroundFit: isset($template['layout']['backgroundFit']) ? (string) $template['layout']['backgroundFit'] : 'stretch',
+        elements: is_array($template['layout']['elements'] ?? null) ? $template['layout']['elements'] : []
+    );
+    if (app_template_has_verification_qr($layout->elements)) {
+        $data['verification_qr_data_uri'] = app_qr_data_uri($verificationUrl, 420, 10);
+    }
+    (new CertificateRenderer())->renderPdf($layout, array_map('strval', $data), $pdfPath);
+
+    $renderer = new EmailTemplateRenderer();
+    $bodyTemplate = (string) ($campaign['emailBodyHtml'] ?? '<p>Your certificate is attached as a PDF.</p>');
+    if (!str_contains($bodyTemplate, 'verification_url')) {
+        $bodyTemplate .= '<p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
+    }
+    $subject = $renderer->render((string) ($campaign['emailSubject'] ?? 'Your certificate is ready'), $data);
+    $body = $renderer->render($bodyTemplate, $data, false);
+    $recipientEmail = (string) ($recipient['email'] ?? $data['email'] ?? '');
+    $recipientName = (string) ($recipient['displayName'] ?? $data['name_en'] ?? $data['name_ar'] ?? $recipientEmail);
+
+    app_audit('campaign.preview_created', 'campaign', $campaignId, ['recipient' => $recipientEmail]);
+
+    return [
+        'campaignId' => $campaignId,
+        'recipientId' => $recipientId,
+        'recipientName' => $recipientName,
+        'recipientEmail' => $recipientEmail,
+        'subject' => $subject,
+        'bodyHtml' => $body,
+        'certificateUrl' => '/preview-certificate.php?file=' . rawurlencode($previewFile),
+        'attachmentName' => 'certificate.pdf',
+        'verificationUrl' => $verificationUrl,
+        'generatedAt' => app_now(),
+    ];
+}
+
+function app_cleanup_preview_files(string $directory): void
+{
+    $files = glob($directory . DIRECTORY_SEPARATOR . '*.pdf');
+    if ($files === false) {
+        return;
+    }
+
+    $cutoff = time() - 86400;
+    foreach ($files as $file) {
+        if (is_file($file) && (filemtime($file) ?: 0) < $cutoff) {
+            @unlink($file);
+        }
+    }
+}
+
 function app_render_and_deliver(array $campaign, array $template, array $recipient): array
 {
     $data = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];

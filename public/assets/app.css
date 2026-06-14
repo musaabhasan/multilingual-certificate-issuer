@@ -918,6 +918,97 @@ code {
     font: 13px/1.45 Consolas, "Courier New", monospace;
 }
 
+.preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    align-items: center;
+    justify-items: center;
+    padding: 24px;
+    background: rgba(32, 33, 36, 0.58);
+}
+
+.preview-modal[hidden] {
+    display: none;
+}
+
+.preview-dialog {
+    width: min(1180px, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    border-radius: 4px;
+    background: #ffffff;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+}
+
+.preview-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid #eeeeee;
+    background: #ffffff;
+}
+
+.preview-header h2,
+.preview-panel h3 {
+    margin: 0;
+}
+
+.preview-dialog > .status {
+    margin: 16px 20px 0;
+}
+
+.preview-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.85fr) minmax(460px, 1.15fr);
+    gap: 16px;
+    padding: 20px;
+}
+
+.preview-panel {
+    min-width: 0;
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    border: 1px solid #eeeeee;
+    border-radius: 3px;
+    padding: 14px;
+    background: #ffffff;
+}
+
+.preview-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.full-detail {
+    grid-column: 1 / -1;
+}
+
+.preview-email-frame,
+.preview-pdf-frame {
+    width: 100%;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+    background: #ffffff;
+}
+
+.preview-email-frame {
+    min-height: 300px;
+}
+
+.preview-pdf-frame {
+    min-height: 620px;
+}
+
 .compact-details {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin: 12px 0 14px;
@@ -1437,6 +1528,7 @@ textarea.short-textarea {
     .diagnostics-summary,
     .campaign-grid,
     .list-toolbar,
+    .preview-grid,
     .mfa-setup-grid {
         grid-template-columns: 1fr;
     }
@@ -1465,6 +1557,19 @@ textarea.short-textarea {
     .page-title {
         display: grid;
         align-items: start;
+    }
+
+    .preview-modal {
+        padding: 12px;
+    }
+
+    .preview-dialog {
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+    }
+
+    .preview-pdf-frame {
+        min-height: 440px;
     }
 }
 

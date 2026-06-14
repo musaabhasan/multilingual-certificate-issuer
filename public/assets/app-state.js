@@ -745,6 +745,11 @@
     return state.campaigns.find((campaign) => campaign.id === id) || null;
   }
 
+  async function previewCampaignRecipientAsync(campaignId, recipientId) {
+    const response = await serverRequestAsync("POST", "campaign-preview", { campaignId, recipientId });
+    return response.preview || null;
+  }
+
   function completeCampaign(id) {
     try {
       const state = applyServerState(serverRequest("POST", "complete-campaign", { id }));
@@ -914,6 +919,7 @@
     updateCampaignStatusAsync,
     manualSendOne,
     manualSendOneAsync,
+    previewCampaignRecipientAsync,
     completeCampaign,
     completeCampaignAsync,
     syncDeliveryProgress,
