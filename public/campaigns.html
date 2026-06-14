@@ -182,8 +182,9 @@
                         <label>SMTP profile <input id="campaignSmtp" type="text" value="Institution SMTP"></label>
                         <label class="wide-field">Email subject <input id="campaignEmailSubject" type="text" value="Your certificate is ready"></label>
                         <label class="wide-field">Email body
-                            <textarea id="campaignEmailBody" class="short-textarea email-body-input" spellcheck="true"><p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p></textarea>
+                            <textarea id="campaignEmailBody" class="short-textarea email-body-input" spellcheck="true"><p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p></textarea>
                         </label>
+                        <label class="checkbox-row wide-field"><input id="campaignIncludeVerificationLink" type="checkbox"> Append verification link when it is not already in the email body</label>
                         <div class="token-row wide-field" aria-label="Email variables">
                             <button type="button" data-email-token="{{name_en}}">name_en</button>
                             <button type="button" data-email-token="{{name_ar}}">name_ar</button>

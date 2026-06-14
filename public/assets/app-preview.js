@@ -73,10 +73,12 @@
 
       renderPreview(target, preview);
       if (setStatus) setStatus("Preview ready", "ready");
+      return preview;
     } catch (error) {
       target.querySelector("[data-preview-status]").textContent = error.message;
       target.querySelector("[data-preview-status]").className = "status warning";
       if (setStatus) setStatus(error.message, "warning");
+      return null;
     }
   }
 

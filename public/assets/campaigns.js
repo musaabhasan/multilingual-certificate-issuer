@@ -28,6 +28,7 @@ const setCampaignStartNow = document.querySelector("#setCampaignStartNow");
 const clearCampaignEnd = document.querySelector("#clearCampaignEnd");
 const campaignEmailSubject = document.querySelector("#campaignEmailSubject");
 const campaignEmailBody = document.querySelector("#campaignEmailBody");
+const campaignIncludeVerificationLink = document.querySelector("#campaignIncludeVerificationLink");
 const wizardBack = document.querySelector("#wizardBack");
 const wizardNext = document.querySelector("#wizardNext");
 const wizardCreate = document.querySelector("#wizardCreate");
@@ -257,6 +258,7 @@ function renderWizardReviewSummary() {
     <div><dt>Random delay</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
     <div><dt>Estimated run</dt><dd>${store.formatDuration(plan.estimatedDurationSeconds || plan.calculatedSpacingSeconds || 0)}</dd></div>
     <div><dt>Subject</dt><dd>${escapeHtml(campaignEmailSubject.value.trim() || "Your certificate is ready")}</dd></div>
+    <div><dt>Verification link</dt><dd>${campaignIncludeVerificationLink?.checked ? "Append if missing" : "Not appended"}</dd></div>
     <div><dt>Tracking</dt><dd>Campaign lanes and Queue monitor will show pending, sent, failed, skipped, and completion status.</dd></div>
   `;
 }
@@ -362,6 +364,7 @@ function renderCampaigns() {
     const primaryActionLabel = campaign.status === "running" ? "Stop sending" : "Start";
     const startBlockedAttribute = primaryAction === "running" && !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
     const sendBlockedAttribute = !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
+    const designReviewLabel = campaign.designReviewedAt ? `Reviewed ${shortTime(campaign.designReviewedAt)}` : "Preview required";
 
     return `
       <article class="campaign-card ${expanded ? "expanded" : "collapsed"}">
@@ -373,6 +376,7 @@ function renderCampaigns() {
           <div class="campaign-header-actions">
             <span class="${store.statusClass(campaign.status)}">${store.statusLabel(campaign.status)}</span>
             <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+            <button type="button" data-action="review-design" data-id="${escapeHtml(campaign.id)}">Review design</button>
             <button type="button" data-action="${primaryAction}" data-id="${escapeHtml(campaign.id)}" ${startBlockedAttribute}>${primaryActionLabel}</button>
             <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete record</button>
             <button type="button" data-action="toggle-details" data-id="${escapeHtml(campaign.id)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "Hide details" : "Open details"}</button>
@@ -386,7 +390,7 @@ function renderCampaigns() {
           <span><strong>${counts.failed}</strong> failed</span>
           <span>${escapeHtml(campaign.importFileName || "No CSV attached")}</span>
           <span>${escapeHtml(readinessLabel(readiness))}</span>
-          <span>${escapeHtml(planLabel)}</span>
+          <span>${escapeHtml(designReviewLabel)}</span>
         </div>
         <div class="campaign-details" ${expanded ? "" : "hidden"}>
           <div class="campaign-section-tabs" role="tablist" aria-label="Campaign detail sections">
@@ -412,6 +416,7 @@ function renderCampaigns() {
               <div><dt>Send end</dt><dd>${escapeHtml(campaign.windowEndAt || "Until complete")}</dd></div>
               <div><dt>Spacing</dt><dd>${store.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
               <div><dt>Random buffer</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
+              <div><dt>Design review</dt><dd>${escapeHtml(designReviewLabel)}</dd></div>
             </dl>
             <div class="readiness-panel">
               <div>
@@ -422,6 +427,7 @@ function renderCampaigns() {
             </div>
             <div class="campaign-command-bar">
               <span class="${planClass}">${escapeHtml(planLabel)}</span>
+              <button type="button" data-action="review-design" data-id="${escapeHtml(campaign.id)}">Review design</button>
               <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}" ${!readiness.ready ? disabledTitle(readiness.blockingMessage) : ""}>Start</button>
               <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
               <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}" ${sendBlockedAttribute}>Send one now</button>
@@ -522,6 +528,10 @@ function renderCampaigns() {
               <label>Email body
                 <textarea data-email-body="${escapeHtml(campaign.id)}" class="short-textarea email-body-input">${escapeHtml(campaign.emailBodyHtml)}</textarea>
               </label>
+              <label class="checkbox-row">
+                <input data-email-verification-link="${escapeHtml(campaign.id)}" type="checkbox" ${campaign.includeVerificationLink ? "checked" : ""}>
+                Append verification link when it is not already in the email body
+              </label>
               <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
               <button type="button" data-action="save-email" data-id="${escapeHtml(campaign.id)}">Save email</button>
             </div>
@@ -600,7 +610,8 @@ campaignForm.addEventListener("submit", async (event) => {
       throttleSeconds: randomDelayMinSeconds || 60,
       smtpProfile: document.querySelector("#campaignSmtp").value.trim() || "Institution SMTP",
       emailSubject: document.querySelector("#campaignEmailSubject").value.trim() || "Your certificate is ready",
-      emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
+      emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || defaultEmailBody(),
+      includeVerificationLink: Boolean(campaignIncludeVerificationLink?.checked),
       attachPdf: true,
       recipients: 0,
       rendered: 0,
@@ -613,6 +624,7 @@ campaignForm.addEventListener("submit", async (event) => {
     lastCampaignTemplateUpload = null;
     campaignCsvFile.value = "";
     campaignTemplateFile.value = "";
+    if (campaignIncludeVerificationLink) campaignIncludeVerificationLink.checked = false;
     expandedCampaigns.clear();
     expandedCampaigns.add(created.id);
     currentWizardStep = "csv";
@@ -669,7 +681,17 @@ campaignList.addEventListener("click", async (event) => {
     try {
       if (recipientButton.dataset.recipientAction === "preview") {
         persistCampaignEmailFromEditors(recipientButton.dataset.id);
-        await window.CertificateIssuerPreview.open(recipientButton.dataset.id, recipientButton.dataset.recipientId, setCampaignLaneStatus);
+        const preview = await window.CertificateIssuerPreview.open(recipientButton.dataset.id, recipientButton.dataset.recipientId, setCampaignLaneStatus);
+        if (!preview) {
+          throw new Error("Preview could not be generated.");
+        }
+        store.markCampaignDesignReviewed(
+          recipientButton.dataset.id,
+          preview.designReviewedAt || preview.generatedAt || new Date().toISOString(),
+          recipientButton.dataset.recipientId
+        );
+        render();
+        setCampaignLaneStatus("Certificate preview reviewed", "ready");
       } else {
         updateRecipientFromButton(recipientButton);
         render();
@@ -708,6 +730,10 @@ campaignList.addEventListener("click", async (event) => {
       await store.manualSendOneAsync(button.dataset.id);
       render();
       setCampaignLaneStatus("One due recipient processed", "ready");
+    } else if (button.dataset.action === "review-design") {
+      await reviewCampaignDesign(button.dataset.id);
+      render();
+      setCampaignLaneStatus("Certificate preview reviewed. Start or send when ready.", "ready");
     } else if (button.dataset.action === "completed") {
       await store.completeCampaignAsync(button.dataset.id);
       render();
@@ -792,6 +818,8 @@ campaignList.addEventListener("click", async (event) => {
         templateFileName: "",
         campaignTemplateName: template?.name || "",
         campaignTemplateLayout: null,
+        designReviewedAt: "",
+        designReviewRecipientId: "",
         deliveryEvents: addCampaignEvent(store.findCampaign(button.dataset.id) || {}, `Template changed to ${template?.name || "saved template"}.`)
       });
       render();
@@ -902,6 +930,8 @@ campaignList.addEventListener("change", async (event) => {
         templateFileName: uploaded.originalName,
         campaignTemplateName: campaign.campaignTemplateName || `${campaign.name} certificate template`,
         campaignTemplateLayout: buildCampaignTemplateLayout(uploaded, "stretch"),
+        designReviewedAt: "",
+        designReviewRecipientId: "",
         deliveryEvents: addCampaignEvent(campaign, `Campaign template image changed to ${uploaded.originalName}.`)
       });
       render();
@@ -949,7 +979,7 @@ document.addEventListener("focusin", (event) => {
   }
 });
 
-["campaignName", "campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax", "campaignEmailSubject", "campaignSmtp"].forEach((id) => {
+["campaignName", "campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax", "campaignEmailSubject", "campaignSmtp", "campaignIncludeVerificationLink"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("input", () => {
     renderPlanPreview();
     renderWizardReviewSummary();
@@ -1205,6 +1235,36 @@ function recipientActionsMarkup(campaignId, recipient) {
   `;
 }
 
+async function reviewCampaignDesign(campaignId) {
+  persistCampaignEmailFromEditors(campaignId);
+  const campaign = store.findCampaign(campaignId);
+  if (!campaign) {
+    throw new Error("Campaign not found.");
+  }
+
+  const recipient = firstPreviewRecipient(campaign);
+  if (!recipient) {
+    throw new Error("Upload recipient CSV data before reviewing the certificate design.");
+  }
+
+  const preview = await window.CertificateIssuerPreview.open(campaignId, recipient.id, setCampaignLaneStatus);
+  if (!preview) {
+    throw new Error("Preview could not be generated.");
+  }
+
+  store.markCampaignDesignReviewed(
+    campaignId,
+    preview.designReviewedAt || preview.generatedAt || new Date().toISOString(),
+    recipient.id
+  );
+  return preview;
+}
+
+function firstPreviewRecipient(campaign) {
+  const queue = Array.isArray(campaign?.recipientQueue) ? campaign.recipientQueue : [];
+  return queue.find((recipient) => !["sent", "failed", "skipped"].includes(recipient.status || "queued")) || queue[0] || null;
+}
+
 function updateRecipientFromButton(button) {
   const campaignId = button.dataset.id;
   const recipientId = button.dataset.recipientId;
@@ -1278,21 +1338,25 @@ function persistCampaignEmailFromEditors(campaignId, options = {}) {
 
   const subjectInput = card.querySelector(`[data-email-subject="${cssEscape(campaignId)}"]`);
   const bodyInput = card.querySelector(`[data-email-body="${cssEscape(campaignId)}"]`);
-  if (!subjectInput && !bodyInput) return store.findCampaign(campaignId);
+  const verificationInput = card.querySelector(`[data-email-verification-link="${cssEscape(campaignId)}"]`);
+  if (!subjectInput && !bodyInput && !verificationInput) return store.findCampaign(campaignId);
 
   const campaign = store.findCampaign(campaignId);
   if (!campaign) return null;
 
   const subject = (subjectInput?.value || "").trim() || "Your certificate is ready";
   const body = (bodyInput?.value || "").trim() || defaultEmailBody();
+  const includeVerificationLink = verificationInput ? verificationInput.checked : Boolean(campaign.includeVerificationLink);
   const changed = subject !== (campaign.emailSubject || "Your certificate is ready")
-    || body !== (campaign.emailBodyHtml || defaultEmailBody());
+    || body !== (campaign.emailBodyHtml || defaultEmailBody())
+    || includeVerificationLink !== Boolean(campaign.includeVerificationLink);
 
   if (!changed && !options.force) return campaign;
 
   return store.updateCampaign(campaignId, {
     emailSubject: subject,
     emailBodyHtml: body,
+    includeVerificationLink,
     attachPdf: true
   });
 }
@@ -1358,6 +1422,7 @@ function duplicateCampaign(campaignId) {
     smtpProfile: source.smtpProfile,
     emailSubject: source.emailSubject,
     emailBodyHtml: source.emailBodyHtml,
+    includeVerificationLink: Boolean(source.includeVerificationLink),
     attachPdf: true,
     recipients: 0,
     rendered: 0,
@@ -1557,7 +1622,7 @@ function normalizeEmailLink(url) {
 }
 
 function defaultEmailBody() {
-  return '<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
+  return '<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p>';
 }
 
 function renderTemplateMode() {

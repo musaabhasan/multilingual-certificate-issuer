@@ -199,6 +199,20 @@ label {
     font-weight: 600;
 }
 
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--ink);
+    line-height: 1.35;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: auto;
+    min-height: auto;
+    margin: 0;
+}
+
 code {
     background: #eef2f7;
     border-radius: 5px;

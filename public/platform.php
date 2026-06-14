@@ -1126,6 +1126,25 @@ function app_recommended_window_seconds(array $campaign, int $pendingRecipients)
     return max(300, $maximum * ($pendingRecipients - 1) + 120);
 }
 
+function app_campaign_include_verification_link(array $campaign): bool
+{
+    return filter_var($campaign['includeVerificationLink'] ?? false, FILTER_VALIDATE_BOOLEAN);
+}
+
+function app_campaign_email_body_template(array $campaign): string
+{
+    $bodyTemplate = trim((string) ($campaign['emailBodyHtml'] ?? ''));
+    if ($bodyTemplate === '') {
+        $bodyTemplate = '<p>Your certificate is attached as a PDF.</p>';
+    }
+
+    if (app_campaign_include_verification_link($campaign) && !str_contains($bodyTemplate, 'verification_url')) {
+        $bodyTemplate .= '<p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
+    }
+
+    return $bodyTemplate;
+}
+
 function app_campaign_readiness(array $state, array $campaign): array
 {
     $template = app_campaign_template($state, $campaign);
@@ -1151,6 +1170,15 @@ function app_campaign_readiness(array $state, array $campaign): array
         $template !== null && count($elements) > 0
             ? count($elements) . ' certificate items are positioned.'
             : 'The template has no positioned text, image, or QR items yet.'
+    );
+    $designReviewedAt = trim((string) ($campaign['designReviewedAt'] ?? ''));
+    $checks[] = app_readiness_check(
+        'design_review',
+        'Certificate preview review',
+        $designReviewedAt !== '' ? 'pass' : 'fail',
+        $designReviewedAt !== ''
+            ? 'A generated certificate preview was reviewed before sending.'
+            : 'Generate and review a certificate preview before starting delivery.'
     );
 
     $checks[] = app_readiness_check(
@@ -1216,10 +1244,14 @@ function app_campaign_readiness(array $state, array $campaign): array
     $checks[] = app_readiness_check(
         'verification_link',
         'Verification link',
-        str_contains($rawBody, 'verification_url') ? 'pass' : 'warn',
-        str_contains($rawBody, 'verification_url')
-            ? 'The message includes the certificate verification link.'
-            : 'The sending engine will append a verification link, but it is better to place it in the message body.'
+        'pass',
+        app_campaign_include_verification_link($campaign)
+            ? (str_contains($rawBody, 'verification_url')
+                ? 'The message includes the certificate verification link.'
+                : 'The sending engine will append the verification link after the configured body.')
+            : (str_contains($rawBody, 'verification_url')
+                ? 'The message body contains a manually inserted verification link.'
+                : 'Verification link will not be included in the message body.')
     );
 
     $randomMin = max(0, (int) ($campaign['randomDelayMinSeconds'] ?? $campaign['throttleSeconds'] ?? 60));
@@ -1648,14 +1680,17 @@ function app_preview_campaign_recipient(string $campaignId, string $recipientId)
     (new CertificateRenderer())->renderPdf($layout, array_map('strval', $data), $pdfPath);
 
     $renderer = new EmailTemplateRenderer();
-    $bodyTemplate = (string) ($campaign['emailBodyHtml'] ?? '<p>Your certificate is attached as a PDF.</p>');
-    if (!str_contains($bodyTemplate, 'verification_url')) {
-        $bodyTemplate .= '<p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
-    }
+    $bodyTemplate = app_campaign_email_body_template($campaign);
     $subject = $renderer->render((string) ($campaign['emailSubject'] ?? 'Your certificate is ready'), $data);
     $body = $renderer->render($bodyTemplate, $data, false);
     $recipientEmail = (string) ($recipient['email'] ?? $data['email'] ?? '');
     $recipientName = (string) ($recipient['displayName'] ?? $data['name_en'] ?? $data['name_ar'] ?? $recipientEmail);
+    $reviewedAt = app_now();
+    $campaign['designReviewedAt'] = $reviewedAt;
+    $campaign['designReviewRecipientId'] = $recipientId;
+    $campaign['updatedAt'] = $reviewedAt;
+    $state['campaigns'][$found['index']] = $campaign;
+    app_save_state($state);
 
     app_audit('campaign.preview_created', 'campaign', $campaignId, ['recipient' => $recipientEmail]);
 
@@ -1669,7 +1704,8 @@ function app_preview_campaign_recipient(string $campaignId, string $recipientId)
         'certificateUrl' => '/preview-certificate.php?file=' . rawurlencode($previewFile),
         'attachmentName' => 'certificate.pdf',
         'verificationUrl' => $verificationUrl,
-        'generatedAt' => app_now(),
+        'generatedAt' => $reviewedAt,
+        'designReviewedAt' => $reviewedAt,
     ];
 }
 
@@ -1718,10 +1754,7 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
     $settings = app_settings();
     $renderer = new EmailTemplateRenderer();
     $subject = $renderer->render((string) ($campaign['emailSubject'] ?? 'Your certificate is ready'), $data);
-    $bodyTemplate = (string) ($campaign['emailBodyHtml'] ?? '<p>Your certificate is attached as a PDF.</p>');
-    if (!str_contains($bodyTemplate, 'verification_url')) {
-        $bodyTemplate .= '<p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
-    }
+    $bodyTemplate = app_campaign_email_body_template($campaign);
     $body = $renderer->render($bodyTemplate, $data, false);
     $deliveryMode = (string) ($settings['smtp']['deliveryMode'] ?? 'log');
     $recipientEmail = (string) ($recipient['email'] ?? $data['email'] ?? '');

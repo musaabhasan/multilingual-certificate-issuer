@@ -372,8 +372,11 @@
       templateFileName: campaign.templateFileName || "",
       campaignTemplateName: campaign.campaignTemplateName || "",
       emailSubject: campaign.emailSubject || "Your certificate is ready",
-      emailBodyHtml: campaign.emailBodyHtml || "<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
+      emailBodyHtml: campaign.emailBodyHtml || "<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p>",
+      includeVerificationLink: Boolean(campaign.includeVerificationLink),
       attachPdf: true,
+      designReviewedAt: campaign.designReviewedAt || "",
+      designReviewRecipientId: campaign.designReviewRecipientId || "",
       recipientQueue,
       deliveryEvents: Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents.slice(-80) : []
     };
@@ -442,6 +445,18 @@
 
     if (existingIndex >= 0) {
       state.templates[existingIndex] = next;
+      state.campaigns = (state.campaigns || []).map((campaign) => {
+        if (campaign.templateId !== next.id || campaign.campaignTemplateLayout) {
+          return campaign;
+        }
+
+        return {
+          ...campaign,
+          designReviewedAt: "",
+          designReviewRecipientId: "",
+          deliveryEvents: addDeliveryEvent(campaign, `Template ${next.name || "layout"} changed. Review a certificate preview before sending.`)
+        };
+      });
     } else {
       state.templates.push(next);
     }
@@ -487,6 +502,8 @@
       importedAt: now(),
       completedAt: "",
       nextSendAfterAt: "",
+      designReviewedAt: "",
+      designReviewRecipientId: "",
       sampleRows: importBatch.records.slice(0, 5),
       recipientQueue,
       deliveryEvents: addDeliveryEvent(campaign, importBatch.message || `${recipientQueue.length} recipients imported from ${importBatch.fileName}.`)
@@ -533,6 +550,17 @@
     return updateCampaign(id, {
       ...updates,
       deliveryEvents: addDeliveryEvent(campaign, "Campaign schedule and send buffer updated.")
+    });
+  }
+
+  function markCampaignDesignReviewed(id, reviewedAt = now(), recipientId = "") {
+    const campaign = findCampaign(id);
+    if (!campaign) return null;
+
+    return updateCampaign(id, {
+      designReviewedAt: reviewedAt,
+      designReviewRecipientId: recipientId,
+      deliveryEvents: addDeliveryEvent(campaign, "Certificate preview reviewed for this campaign.")
     });
   }
 
@@ -619,6 +647,8 @@
       windowExpiredAt: "",
       nextSendAfterAt: "",
       completedAt: "",
+      designReviewedAt: "",
+      designReviewRecipientId: "",
       recipientQueue: queue,
       deliveryEvents: addDeliveryEvent(campaign, "Campaign queue reset. Start the campaign when the schedule and speed are ready.")
     });
@@ -643,6 +673,8 @@
       windowExpiredAt: "",
       nextSendAfterAt: "",
       completedAt: "",
+      designReviewedAt: "",
+      designReviewRecipientId: "",
       recipientQueue: queue,
       deliveryEvents: [
         { at: now(), message: `Reusable campaign created from ${source.name || "campaign"}.` }
@@ -719,6 +751,14 @@
         ? `${elements.length} certificate items are positioned.`
         : "The template has no positioned text, image, or QR items yet."
     ));
+    checks.push(readinessCheck(
+      "design_review",
+      "Certificate preview review",
+      normalized.designReviewedAt ? "pass" : "fail",
+      normalized.designReviewedAt
+        ? `Reviewed ${formatShortDateTime(normalized.designReviewedAt)}.`
+        : "Generate and review a certificate preview before starting delivery."
+    ));
 
     checks.push(readinessCheck(
       "recipient_queue",
@@ -776,10 +816,14 @@
     checks.push(readinessCheck(
       "verification_link",
       "Verification link",
-      String(normalized.emailBodyHtml || "").includes("verification_url") ? "pass" : "warn",
-      String(normalized.emailBodyHtml || "").includes("verification_url")
-        ? "The message includes the certificate verification link."
-        : "The sending engine will append a verification link, but it is better to place it in the message body."
+      "pass",
+      normalized.includeVerificationLink
+        ? (String(normalized.emailBodyHtml || "").includes("verification_url")
+          ? "The message includes the certificate verification link."
+          : "The sending engine will append the verification link after the configured body.")
+        : (String(normalized.emailBodyHtml || "").includes("verification_url")
+          ? "The message body contains a manually inserted verification link."
+          : "Verification link will not be included in the message body.")
     ));
 
     const plan = deliveryPlan(normalized);
@@ -896,6 +940,17 @@
     if (hours > 0) return `${hours}h ${minutes}m`;
     if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
     return `${remainingSeconds}s`;
+  }
+
+  function formatShortDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || "recently");
+    return date.toLocaleString([], {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
   }
 
   function delayUnitOptions() {
@@ -1121,6 +1176,7 @@
     deleteCampaign,
     deleteCampaigns,
     updateCampaignSchedule,
+    markCampaignDesignReviewed,
     campaignCounts,
     attachImportToCampaign,
     retryRecipient,
