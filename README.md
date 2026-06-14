@@ -56,6 +56,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | `database/schema.sql` | MySQL 8.0 schema with bilingual-safe collations |
 | `docs` | Architecture, security model, deployment, and project plan |
 | `examples` | Sample Arabic/English CSV and template layout |
+| `examples/visual-regression` | Deterministic bilingual PDF proof fixtures |
 
 ## Documentation
 
@@ -149,6 +150,12 @@ Run the template asset integrity audit:
 
 ```bash
 php bin/template-asset-audit-demo.php examples/template-asset-manifest-sample.json
+```
+
+Generate the Arabic/English PDF visual regression proof set:
+
+```bash
+php bin/pdf-visual-regression-samples.php
 ```
 
 Run the SMTP domain alignment audit:

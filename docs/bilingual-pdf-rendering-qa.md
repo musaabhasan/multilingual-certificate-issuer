@@ -97,6 +97,7 @@ Blocking findings:
 
 1. Export the approved template JSON and asset manifest.
 2. Render the edge-case CSV as a proof batch.
+   Use `php bin/pdf-visual-regression-samples.php` to generate the tracked mixed RTL/LTR fixture set when validating renderer, font, or PDF/A changes.
 3. Compare proof PDFs against the visual canvas and safe-zone overlay.
 4. Inspect embedded fonts and text extraction for Arabic, English, mixed, numeric, and punctuation samples.
 5. Scan every QR code in the proof batch and save verification receipts.
