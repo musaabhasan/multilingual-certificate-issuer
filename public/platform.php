@@ -290,9 +290,9 @@ function app_public_settings(): array
     return $settings;
 }
 
-function app_save_settings(array $input): array
+function app_normalize_settings(array $input, ?array $current = null): array
 {
-    $current = app_settings();
+    $current ??= app_settings();
     $smtp = is_array($input['smtp'] ?? null) ? $input['smtp'] : [];
     $platform = is_array($input['platform'] ?? null) ? $input['platform'] : [];
     $security = is_array($input['security'] ?? null) ? $input['security'] : [];
@@ -340,6 +340,12 @@ function app_save_settings(array $input): array
         throw new RuntimeException('SMTP mode requires a password.');
     }
 
+    return $current;
+}
+
+function app_save_settings(array $input): array
+{
+    $current = app_normalize_settings($input);
     app_write_json(app_storage_path('settings.json'), $current);
     app_audit('settings.updated', 'settings', null, ['smtp_mode' => $current['smtp']['deliveryMode']]);
     return app_public_settings();
@@ -1262,7 +1268,73 @@ function app_time_or_null(string $value): ?int
     return $timestamp === false ? null : $timestamp;
 }
 
+function app_send_smtp_test_email(array $input, array $actor): array
+{
+    app_enforce_rate_limit('smtp-test-email', (string) ($actor['id'] ?? app_client_ip()) . ':' . app_client_ip(), 8, 3600);
+
+    $recipientEmail = strtolower(trim((string) ($input['recipientEmail'] ?? '')));
+    $recipientName = trim((string) ($input['recipientName'] ?? ''));
+    if ($recipientName === '') {
+        $recipientName = (string) ($actor['name'] ?? 'SMTP test recipient');
+    }
+    if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('A valid test recipient email is required.');
+    }
+
+    $settings = app_normalize_settings(is_array($input['settings'] ?? null) ? $input['settings'] : [], app_settings());
+    $smtp = $settings['smtp'];
+    if (($smtp['deliveryMode'] ?? 'log') !== 'smtp') {
+        throw new RuntimeException('Switch delivery mode to SMTP before sending a test email.');
+    }
+
+    $platformName = htmlspecialchars((string) ($settings['platform']['name'] ?? 'Certificate Issuer'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $hostLabel = htmlspecialchars((string) ($smtp['host'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $fromAddress = htmlspecialchars((string) ($smtp['fromAddress'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $encryption = htmlspecialchars(strtoupper((string) ($smtp['encryption'] ?? 'tls')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $sentAt = app_now();
+    $subject = 'Certificate Issuer SMTP test';
+    $body = '<p>This is a test email from ' . $platformName . '.</p>'
+        . '<p>If you received this message, the configured SMTP host, port, encryption, username, password, and sender address can send email successfully.</p>'
+        . '<dl>'
+        . '<dt>SMTP host</dt><dd>' . $hostLabel . ':' . (int) ($smtp['port'] ?? 587) . '</dd>'
+        . '<dt>Encryption</dt><dd>' . $encryption . '</dd>'
+        . '<dt>From</dt><dd>' . $fromAddress . '</dd>'
+        . '<dt>Sent at</dt><dd>' . htmlspecialchars($sentAt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</dd>'
+        . '</dl>';
+
+    try {
+        app_send_smtp_message($settings, $recipientEmail, $recipientName, $subject, $body);
+    } catch (Throwable $error) {
+        app_audit('settings.smtp_test_failed', 'settings', null, [
+            'recipient_hash' => hash('sha256', $recipientEmail),
+            'host' => (string) ($smtp['host'] ?? ''),
+            'port' => (int) ($smtp['port'] ?? 587),
+            'error' => substr($error->getMessage(), 0, 180),
+        ]);
+        throw new RuntimeException('SMTP test failed: ' . $error->getMessage(), 0, $error);
+    }
+
+    app_audit('settings.smtp_test_sent', 'settings', null, [
+        'recipient_hash' => hash('sha256', $recipientEmail),
+        'host' => (string) ($smtp['host'] ?? ''),
+        'port' => (int) ($smtp['port'] ?? 587),
+    ]);
+
+    return [
+        'recipientEmail' => $recipientEmail,
+        'sentAt' => $sentAt,
+        'host' => (string) ($smtp['host'] ?? ''),
+        'port' => (int) ($smtp['port'] ?? 587),
+        'encryption' => (string) ($smtp['encryption'] ?? 'tls'),
+    ];
+}
+
 function app_send_smtp(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, string $pdfPath): void
+{
+    app_send_smtp_message($settings, $recipientEmail, $recipientName, $subject, $body, $pdfPath);
+}
+
+function app_send_smtp_message(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, ?string $pdfPath = null): void
 {
     $smtp = $settings['smtp'];
     foreach (['host', 'username', 'fromAddress'] as $required) {
@@ -1287,6 +1359,7 @@ function app_send_smtp(array $settings, string $recipientEmail, string $recipien
     $mail->Username = (string) $smtp['username'];
     $mail->Password = app_decrypt_secret((string) ($smtp['encryptedPassword'] ?? ''));
     $mail->SMTPSecure = (string) $smtp['encryption'];
+    $mail->Timeout = 20;
     $mail->CharSet = 'UTF-8';
     $mail->setFrom((string) $smtp['fromAddress'], (string) $smtp['fromName']);
     $mail->addAddress($recipientEmail, $recipientName);
@@ -1294,7 +1367,12 @@ function app_send_smtp(array $settings, string $recipientEmail, string $recipien
     $mail->isHTML(true);
     $mail->Body = $body;
     $mail->AltBody = strip_tags($body);
-    $mail->addAttachment($pdfPath, 'certificate.pdf', 'base64', 'application/pdf');
+    if ($pdfPath !== null) {
+        if (!is_file($pdfPath)) {
+            throw new RuntimeException('Email attachment was not found.');
+        }
+        $mail->addAttachment($pdfPath, 'certificate.pdf', 'base64', 'application/pdf');
+    }
     $mail->send();
 }
 

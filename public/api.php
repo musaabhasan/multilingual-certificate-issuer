@@ -63,6 +63,14 @@ try {
         ]);
     }
 
+    if ($action === 'settings-test-email' && $method === 'POST') {
+        app_require_admin($user);
+        app_json_response([
+            'test' => app_send_smtp_test_email(app_json_payload(), $user),
+            'csrf' => app_csrf_token(),
+        ]);
+    }
+
     if ($action === 'users' && $method === 'GET') {
         app_require_admin($user);
         app_json_response([

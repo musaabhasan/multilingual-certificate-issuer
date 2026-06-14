@@ -1,6 +1,9 @@
 const adminAuth = window.CertificateIssuerAuth;
 const settingsForm = document.querySelector("#settingsForm");
 const settingsStatus = document.querySelector("#settingsStatus");
+const smtpTestForm = document.querySelector("#smtpTestForm");
+const smtpTestStatus = document.querySelector("#smtpTestStatus");
+const smtpTestResult = document.querySelector("#smtpTestResult");
 const usersStatus = document.querySelector("#usersStatus");
 const userList = document.querySelector("#userList");
 const userForm = document.querySelector("#userForm");
@@ -29,14 +32,17 @@ async function loadSettings() {
   document.querySelector("#smtpPassword").placeholder = settings.smtp?.hasPassword ? "Password saved; leave blank to keep it" : "SMTP password";
   document.querySelector("#smtpFromAddress").value = settings.smtp?.fromAddress || "";
   document.querySelector("#smtpFromName").value = settings.smtp?.fromName || "Certificate Issuer";
+  if (!document.querySelector("#smtpTestRecipient").value && adminAuth.user?.email) {
+    document.querySelector("#smtpTestRecipient").value = adminAuth.user.email;
+  }
+  if (!document.querySelector("#smtpTestRecipientName").value && adminAuth.user?.name) {
+    document.querySelector("#smtpTestRecipientName").value = adminAuth.user.name;
+  }
   setStatus(settingsStatus, settings.smtp?.deliveryMode === "smtp" ? "SMTP mode" : "Local log mode", "ready");
 }
 
-async function saveSettings(event) {
-  event.preventDefault();
-  setStatus(settingsStatus, "Saving", "pending");
-
-  const payload = {
+function currentSettingsPayload() {
+  return {
     platform: {
       name: document.querySelector("#platformName").value.trim(),
       publicBaseUrl: document.querySelector("#publicBaseUrl").value.trim()
@@ -57,6 +63,13 @@ async function saveSettings(event) {
       fromName: document.querySelector("#smtpFromName").value.trim()
     }
   };
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  setStatus(settingsStatus, "Saving", "pending");
+
+  const payload = currentSettingsPayload();
 
   try {
     await adminAuth.api("POST", "settings", payload);
@@ -65,6 +78,29 @@ async function saveSettings(event) {
     setStatus(settingsStatus, "Settings saved", "ready");
   } catch (error) {
     setStatus(settingsStatus, error.message, "warning");
+  }
+}
+
+async function sendTestEmail(event) {
+  event.preventDefault();
+  setStatus(smtpTestStatus, "Sending", "pending");
+  smtpTestResult.textContent = "";
+  smtpTestResult.className = "test-result";
+
+  try {
+    const { test } = await adminAuth.api("POST", "settings-test-email", {
+      recipientEmail: document.querySelector("#smtpTestRecipient").value.trim(),
+      recipientName: document.querySelector("#smtpTestRecipientName").value.trim(),
+      settings: currentSettingsPayload()
+    });
+    setStatus(smtpTestStatus, "Test sent", "ready");
+    smtpTestResult.textContent = `Sent to ${test.recipientEmail} through ${test.host}:${test.port} at ${shortDate(test.sentAt)}.`;
+    smtpTestResult.className = "test-result ready";
+    await loadAudit();
+  } catch (error) {
+    setStatus(smtpTestStatus, "Test failed", "warning");
+    smtpTestResult.textContent = error.message;
+    smtpTestResult.className = "test-result warning";
   }
 }
 
@@ -161,6 +197,7 @@ function escapeHtml(value) {
 }
 
 settingsForm.addEventListener("submit", saveSettings);
+smtpTestForm.addEventListener("submit", sendTestEmail);
 userForm.addEventListener("submit", createUser);
 passwordForm.addEventListener("submit", changePassword);
 refreshAudit.addEventListener("click", loadAudit);

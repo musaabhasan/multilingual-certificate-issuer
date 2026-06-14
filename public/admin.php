@@ -86,6 +86,18 @@ function e(string $value): string
                     <label>From name <input id="smtpFromName" type="text"></label>
                     <button class="primary" type="submit">Save settings</button>
                 </form>
+                <div class="smtp-test-panel">
+                    <div class="panel-header compact-header">
+                        <h3>Test email delivery</h3>
+                        <span id="smtpTestStatus" class="status locked">Not tested</span>
+                    </div>
+                    <form id="smtpTestForm" class="form-grid">
+                        <label>Test recipient email <input id="smtpTestRecipient" type="email" required></label>
+                        <label>Recipient name <input id="smtpTestRecipientName" type="text"></label>
+                        <button type="submit">Send test email</button>
+                    </form>
+                    <p id="smtpTestResult" class="test-result" aria-live="polite"></p>
+                </div>
             </article>
 
             <article class="panel">
