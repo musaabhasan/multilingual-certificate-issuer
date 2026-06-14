@@ -10,6 +10,7 @@ $checks = [
     'storage_app_writable' => is_writable(app_storage_path()),
     'storage_certificates_writable' => app_directory_writable(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'certificates'),
     'storage_uploads_writable' => app_directory_writable(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'uploads'),
+    'extension_curl' => extension_loaded('curl'),
     'extension_sodium' => extension_loaded('sodium'),
     'extension_fileinfo' => extension_loaded('fileinfo'),
     'extension_gd' => extension_loaded('gd'),

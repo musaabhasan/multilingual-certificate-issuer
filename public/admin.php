@@ -40,7 +40,7 @@ function e(string $value): string
         <div>
             <p class="eyebrow">Platform management</p>
             <h1>Admin panel</h1>
-            <p>Manage platform access, SMTP delivery, security settings, and audit activity.</p>
+            <p>Manage platform access, certificate delivery, security settings, and audit activity.</p>
         </div>
         <div class="actions">
             <span class="status ready" data-current-user><?= e((string) ($user['name'] ?? $user['email'] ?? 'Signed in')) ?></span>
@@ -51,13 +51,13 @@ function e(string $value): string
         <section class="panel">
             <span class="status warning">Administrator access required</span>
             <h2>Access denied</h2>
-            <p>Your account can use the platform, but only administrators can change SMTP settings or manage users.</p>
+            <p>Your account can use the platform, but only administrators can change delivery settings or manage users.</p>
         </section>
     <?php else: ?>
         <section class="workspace admin-grid">
             <article class="panel span-2">
                 <div class="panel-header">
-                    <h2>SMTP and platform settings</h2>
+                    <h2>Delivery and platform settings</h2>
                     <span id="settingsStatus" class="status locked">Loading</span>
                 </div>
                 <form id="settingsForm" class="form-grid">
@@ -69,6 +69,7 @@ function e(string $value): string
                         <select id="smtpDeliveryMode">
                             <option value="log">Render and log locally</option>
                             <option value="smtp">Send through SMTP</option>
+                            <option value="graph">Send through Microsoft Graph</option>
                         </select>
                     </label>
                     <label>Profile name <input id="smtpProfileName" type="text"></label>
@@ -84,18 +85,23 @@ function e(string $value): string
                     <label>SMTP password <input id="smtpPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password"></label>
                     <label>From address <input id="smtpFromAddress" type="email"></label>
                     <label>From name <input id="smtpFromName" type="text"></label>
+                    <label>Graph tenant ID <input id="graphTenantId" type="text" autocomplete="off" placeholder="Tenant ID or domain"></label>
+                    <label>Graph client ID <input id="graphClientId" type="text" autocomplete="off"></label>
+                    <label>Graph client secret <input id="graphClientSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep current secret"></label>
+                    <label>Graph sender mailbox <input id="graphSender" type="email" autocomplete="off"></label>
+                    <p class="form-note full-field">Microsoft Graph mode uses an Entra app registration with Microsoft Graph Mail.Send application permission and admin consent. It sends through the configured sender mailbox and attaches certificate PDFs.</p>
                     <button class="primary" type="submit">Save settings</button>
                 </form>
                 <div class="smtp-test-panel">
                     <div class="panel-header compact-header">
-                        <h3>SMTP verification</h3>
+                        <h3>Delivery verification</h3>
                         <span id="smtpTestStatus" class="status locked">Not tested</span>
                     </div>
                     <div class="action-row">
                         <button id="smtpDiagnosticsButton" type="button">Run diagnostics</button>
                     </div>
                     <div id="smtpDiagnostics" class="diagnostics-list">
-                        <p class="form-note">Run diagnostics to examine the current SMTP mode, required fields, encryption, sender settings, and host connectivity.</p>
+                        <p class="form-note">Run diagnostics to examine the current delivery mode, required fields, sender settings, provider authentication, and host connectivity.</p>
                     </div>
                     <form id="smtpTestForm" class="form-grid">
                         <label>Test recipient email <input id="smtpTestRecipient" type="email" required></label>

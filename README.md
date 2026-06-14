@@ -2,7 +2,7 @@
 
 A secure PHP 8.3 and MySQL 8.0 platform for designing, generating, and distributing bilingual Arabic/English digital certificates at scale.
 
-The platform replaces manual certificate creation with a controlled pipeline: template design, CSV data import, PDF/A generation, SMTP delivery, throttled queues, scheduling, password-protected administration, encrypted credentials, rate limits, and audit logs.
+The platform replaces manual certificate creation with a controlled pipeline: template design, CSV data import, PDF/A generation, SMTP or Microsoft Graph delivery, throttled queues, scheduling, password-protected administration, encrypted credentials, rate limits, and audit logs.
 
 ## Core Capabilities
 
@@ -15,7 +15,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
 | Bilingual rendering QA | Pre-release proofing workflow | Arabic shaping, RTL/LTR, mixed text, font embedding, PDF/A, QR placement, accessibility, and evidence checks |
 | PDF accessibility remediation | Inclusive certificate repair workflow | Reading order, language metadata, contrast, QR fallback text, font embedding, print proof, hash reconciliation, and reissue evidence |
-| Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
+| Distribution | Secure email delivery | PHPMailer SMTP with TLS/SSL or Microsoft Graph Mail.Send, encrypted credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | SMTP alignment audit | Sender-domain release gate | From-domain alignment, SPF, DKIM, DMARC, return-path, bounce/complaint handling, TLS, approval, and throttle checks |
@@ -49,7 +49,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | --- | --- |
 | `src/Certificate` | CSV mapping, template layout validation, PDF rendering |
 | `src/Database` | PDO connection factory |
-| `src/Mail` | Encrypted SMTP profile handling and certificate mailer |
+| `src/Mail` | Encrypted mail profile handling and certificate mailer |
 | `src/Queue` | Throttled distribution worker |
 | `src/Security` | Encryption, password policy helpers, audit logging |
 | `public` | Dashboard, designer, import, queue, and verification UI surfaces |
@@ -201,7 +201,7 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 
 - Store application secrets outside Git.
 - Generate a 32-byte sodium key for `APP_KEY`.
-- Encrypt SMTP passwords before database storage.
+- Encrypt SMTP passwords and Microsoft Graph client secrets before database storage.
 - Create the first administrator account during setup and enforce the password policy for all users.
 - Require administrator MFA enrollment before access to protected management pages.
 - Store TOTP secrets encrypted and recovery codes hashed; show recovery codes only at enrollment or regeneration.
@@ -219,8 +219,8 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Reconcile certificate hashes, queue records, SMTP events, bounces, suppression entries, and support disputes before batch closure.
 - Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
 - Record revocation and reissue decisions with source-of-truth evidence, recipient notification, public verification state, token impact, and closure proof.
-- Log authentication, template, SMTP, CSV, generation, and delivery actions.
-- Use TLS for SMTP and HTTPS for the application.
+- Log authentication, template, mail delivery, CSV, generation, and delivery actions.
+- Use TLS for SMTP, HTTPS for Microsoft Graph, and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
 - Check hashed suppression records before sending to hard-bounced, complained, or manually held recipients.
 - Audit delivery suppression, retry, complaint, and release evidence before resuming or approving high-volume batches.

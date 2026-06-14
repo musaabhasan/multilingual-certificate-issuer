@@ -34,13 +34,17 @@ async function loadSettings() {
   document.querySelector("#smtpPassword").placeholder = settings.smtp?.hasPassword ? "Password saved; leave blank to keep it" : "SMTP password";
   document.querySelector("#smtpFromAddress").value = settings.smtp?.fromAddress || "";
   document.querySelector("#smtpFromName").value = settings.smtp?.fromName || "Certificate Issuer";
+  document.querySelector("#graphTenantId").value = settings.smtp?.graphTenantId || "";
+  document.querySelector("#graphClientId").value = settings.smtp?.graphClientId || "";
+  document.querySelector("#graphClientSecret").placeholder = settings.smtp?.hasGraphClientSecret ? "Secret saved; leave blank to keep it" : "Graph client secret";
+  document.querySelector("#graphSender").value = settings.smtp?.graphSender || "";
   if (!document.querySelector("#smtpTestRecipient").value && adminAuth.user?.email) {
     document.querySelector("#smtpTestRecipient").value = adminAuth.user.email;
   }
   if (!document.querySelector("#smtpTestRecipientName").value && adminAuth.user?.name) {
     document.querySelector("#smtpTestRecipientName").value = adminAuth.user.name;
   }
-  setStatus(settingsStatus, settings.smtp?.deliveryMode === "smtp" ? "SMTP mode" : "Local log mode", "ready");
+  setStatus(settingsStatus, deliveryModeLabel(settings.smtp?.deliveryMode), "ready");
 }
 
 function currentSettingsPayload() {
@@ -62,7 +66,11 @@ function currentSettingsPayload() {
       username: document.querySelector("#smtpUsername").value.trim(),
       password: document.querySelector("#smtpPassword").value,
       fromAddress: document.querySelector("#smtpFromAddress").value.trim(),
-      fromName: document.querySelector("#smtpFromName").value.trim()
+      fromName: document.querySelector("#smtpFromName").value.trim(),
+      graphTenantId: document.querySelector("#graphTenantId").value.trim(),
+      graphClientId: document.querySelector("#graphClientId").value.trim(),
+      graphClientSecret: document.querySelector("#graphClientSecret").value,
+      graphSender: document.querySelector("#graphSender").value.trim()
     }
   };
 }
@@ -76,6 +84,7 @@ async function saveSettings(event) {
   try {
     await adminAuth.api("POST", "settings", payload);
     document.querySelector("#smtpPassword").value = "";
+    document.querySelector("#graphClientSecret").value = "";
     await loadSettings();
     setStatus(settingsStatus, "Settings saved", "ready");
   } catch (error) {
@@ -96,7 +105,9 @@ async function sendTestEmail(event) {
       settings: currentSettingsPayload()
     });
     setStatus(smtpTestStatus, "Test sent", "ready");
-    smtpTestResult.textContent = `Sent to ${test.recipientEmail} through ${test.host}:${test.port} at ${shortDate(test.sentAt)}.`;
+    smtpTestResult.textContent = test.transport === "graph"
+      ? `Sent to ${test.recipientEmail} through Microsoft Graph as ${test.sender || "configured sender"} at ${shortDate(test.sentAt)}.`
+      : `Sent to ${test.recipientEmail} through ${test.host}:${test.port} at ${shortDate(test.sentAt)}.`;
     smtpTestResult.className = "test-result ready";
     await loadAudit();
   } catch (error) {
@@ -120,7 +131,7 @@ async function showSmtpDiagnosticsAfterFailure() {
 
 async function runSmtpDiagnostics() {
   setStatus(smtpTestStatus, "Checking", "pending");
-  smtpDiagnostics.innerHTML = "<p class=\"form-note\">Checking SMTP configuration and host connectivity.</p>";
+  smtpDiagnostics.innerHTML = "<p class=\"form-note\">Checking delivery configuration and provider connectivity.</p>";
 
   try {
     const { diagnostics } = await adminAuth.api("POST", "settings-smtp-diagnostics", {
@@ -138,13 +149,25 @@ async function runSmtpDiagnostics() {
 function renderSmtpDiagnostics(diagnostics) {
   const summary = diagnostics.summary || {};
   const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
-  smtpDiagnostics.innerHTML = `
-    <div class="diagnostics-summary">
-      <div><span>Mode</span><strong>${escapeHtml(summary.deliveryMode || "unknown")}</strong></div>
+  const providerFields = summary.deliveryMode === "graph"
+    ? `
+      <div><span>Graph sender</span><strong>${escapeHtml(summary.graphSender || "Not configured")}</strong></div>
+      <div><span>Graph app</span><strong>${escapeHtml(summary.graphClientId || "Not configured")}</strong></div>
+      <div><span>Graph secret</span><strong>${summary.hasGraphClientSecret ? "Saved" : "Missing"}</strong></div>
+    `
+    : `
       <div><span>Host</span><strong>${escapeHtml(summary.host ? `${summary.host}:${summary.port || ""}` : "Not configured")}</strong></div>
       <div><span>Encryption</span><strong>${escapeHtml(summary.encryption || "-")}</strong></div>
-      <div><span>From</span><strong>${escapeHtml(summary.fromAddress || "Not configured")}</strong></div>
       <div><span>Password</span><strong>${summary.hasPassword ? "Saved" : "Missing"}</strong></div>
+    `;
+  const senderField = summary.deliveryMode === "graph"
+    ? `<div><span>Tenant</span><strong>${escapeHtml(summary.graphTenantId || "Not configured")}</strong></div>`
+    : `<div><span>From</span><strong>${escapeHtml(summary.fromAddress || "Not configured")}</strong></div>`;
+  smtpDiagnostics.innerHTML = `
+    <div class="diagnostics-summary">
+      <div><span>Mode</span><strong>${escapeHtml(deliveryModeLabel(summary.deliveryMode))}</strong></div>
+      ${providerFields}
+      ${senderField}
       <div><span>Checked</span><strong>${escapeHtml(shortDate(diagnostics.generatedAt))}</strong></div>
     </div>
     <div class="diagnostic-checks">
@@ -159,6 +182,12 @@ function renderSmtpDiagnostics(diagnostics) {
       `).join("") || "<p class=\"form-note\">No diagnostics returned.</p>"}
     </div>
   `;
+}
+
+function deliveryModeLabel(mode) {
+  if (mode === "smtp") return "SMTP mode";
+  if (mode === "graph") return "Microsoft Graph mode";
+  return "Local log mode";
 }
 
 function smtpDiagnosticStatusClass(status) {

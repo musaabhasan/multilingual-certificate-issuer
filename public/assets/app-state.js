@@ -356,7 +356,21 @@
 
     return clone(cachedSettings || {
       platform: { name: "Certificate Issuer", publicBaseUrl: window.location.origin },
-      smtp: { deliveryMode: "log", profileName: "Institution SMTP", host: "", port: 587, encryption: "tls", username: "", fromAddress: "", fromName: "Certificate Issuer", hasPassword: false }
+      smtp: {
+        deliveryMode: "log",
+        profileName: "Institution SMTP",
+        host: "",
+        port: 587,
+        encryption: "tls",
+        username: "",
+        fromAddress: "",
+        fromName: "Certificate Issuer",
+        hasPassword: false,
+        graphTenantId: "",
+        graphClientId: "",
+        graphSender: "",
+        hasGraphClientSecret: false
+      }
     });
   }
 

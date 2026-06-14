@@ -1,10 +1,11 @@
 {
   "name": "musaabhasan/multilingual-certificate-issuer",
-  "description": "Secure multilingual certificate issuance and SMTP distribution platform for Arabic and English digital credentials.",
+  "description": "Secure multilingual certificate issuance and email distribution platform for Arabic and English digital credentials.",
   "type": "project",
   "license": "MIT",
   "require": {
     "php": "^8.3",
+    "ext-curl": "*",
     "ext-gd": "*",
     "ext-intl": "*",
     "ext-mbstring": "*",

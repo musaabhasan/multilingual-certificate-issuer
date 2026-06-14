@@ -285,6 +285,10 @@ function app_default_settings(): array
             'encryptedPassword' => '',
             'fromAddress' => '',
             'fromName' => 'Certificate Issuer',
+            'graphTenantId' => '',
+            'graphClientId' => '',
+            'encryptedGraphClientSecret' => '',
+            'graphSender' => '',
         ],
         'security' => [
             'sessionTimeoutMinutes' => 120,
@@ -302,11 +306,13 @@ function app_public_settings(): array
 {
     $settings = app_settings();
     $settings['smtp']['hasPassword'] = ($settings['smtp']['encryptedPassword'] ?? '') !== '';
+    $settings['smtp']['hasGraphClientSecret'] = ($settings['smtp']['encryptedGraphClientSecret'] ?? '') !== '';
     unset($settings['smtp']['encryptedPassword']);
+    unset($settings['smtp']['encryptedGraphClientSecret']);
     return $settings;
 }
 
-function app_normalize_settings(array $input, ?array $current = null): array
+function app_normalize_settings(array $input, ?array $current = null, bool $strictDelivery = true): array
 {
     $current ??= app_settings();
     $smtp = is_array($input['smtp'] ?? null) ? $input['smtp'] : [];
@@ -325,13 +331,39 @@ function app_normalize_settings(array $input, ?array $current = null): array
     $current['security']['passwordRotationDays'] = min(365, max(1, (int) ($security['passwordRotationDays'] ?? $current['security']['passwordRotationDays'])));
 
     $current['smtp']['profileName'] = trim((string) ($smtp['profileName'] ?? $current['smtp']['profileName']));
-    $current['smtp']['deliveryMode'] = in_array(($smtp['deliveryMode'] ?? 'log'), ['log', 'smtp'], true) ? $smtp['deliveryMode'] : 'log';
+    $deliveryMode = (string) ($smtp['deliveryMode'] ?? $current['smtp']['deliveryMode'] ?? 'log');
+    $current['smtp']['deliveryMode'] = in_array($deliveryMode, ['log', 'smtp', 'graph'], true) ? $deliveryMode : 'log';
     $current['smtp']['host'] = trim((string) ($smtp['host'] ?? $current['smtp']['host']));
     $current['smtp']['port'] = min(65535, max(1, (int) ($smtp['port'] ?? $current['smtp']['port'])));
-    $current['smtp']['encryption'] = in_array(($smtp['encryption'] ?? 'tls'), ['tls', 'ssl'], true) ? $smtp['encryption'] : 'tls';
+    $encryption = (string) ($smtp['encryption'] ?? $current['smtp']['encryption'] ?? 'tls');
+    $current['smtp']['encryption'] = in_array($encryption, ['tls', 'ssl'], true) ? $encryption : 'tls';
     $current['smtp']['username'] = trim((string) ($smtp['username'] ?? $current['smtp']['username']));
     $current['smtp']['fromAddress'] = trim((string) ($smtp['fromAddress'] ?? $current['smtp']['fromAddress']));
     $current['smtp']['fromName'] = trim((string) ($smtp['fromName'] ?? $current['smtp']['fromName']));
+    $current['smtp']['graphTenantId'] = trim((string) ($smtp['graphTenantId'] ?? $current['smtp']['graphTenantId'] ?? ''));
+    $current['smtp']['graphClientId'] = trim((string) ($smtp['graphClientId'] ?? $current['smtp']['graphClientId'] ?? ''));
+    $current['smtp']['graphSender'] = strtolower(trim((string) ($smtp['graphSender'] ?? $current['smtp']['graphSender'] ?? '')));
+
+    $plainPassword = (string) ($smtp['password'] ?? '');
+    if ($plainPassword !== '') {
+        $current['smtp']['encryptedPassword'] = app_encrypt_secret($plainPassword);
+    }
+
+    $plainGraphSecret = (string) ($smtp['graphClientSecret'] ?? '');
+    if ($plainGraphSecret !== '') {
+        $current['smtp']['encryptedGraphClientSecret'] = app_encrypt_secret($plainGraphSecret);
+    }
+
+    if ($current['smtp']['fromAddress'] !== '' && !filter_var($current['smtp']['fromAddress'], FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('SMTP from address is invalid.');
+    }
+    if ($current['smtp']['graphSender'] !== '' && !filter_var($current['smtp']['graphSender'], FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Microsoft Graph sender mailbox is invalid.');
+    }
+
+    if (!$strictDelivery) {
+        return $current;
+    }
 
     if ($current['smtp']['deliveryMode'] === 'smtp') {
         foreach (['host', 'username', 'fromAddress'] as $required) {
@@ -340,20 +372,19 @@ function app_normalize_settings(array $input, ?array $current = null): array
             }
         }
 
-        if (!filter_var($current['smtp']['fromAddress'], FILTER_VALIDATE_EMAIL)) {
-            throw new RuntimeException('SMTP from address is invalid.');
+        if (($current['smtp']['encryptedPassword'] ?? '') === '') {
+            throw new RuntimeException('SMTP mode requires a password.');
         }
-    } elseif ($current['smtp']['fromAddress'] !== '' && !filter_var($current['smtp']['fromAddress'], FILTER_VALIDATE_EMAIL)) {
-        throw new RuntimeException('SMTP from address is invalid.');
-    }
+    } elseif ($current['smtp']['deliveryMode'] === 'graph') {
+        foreach (['graphTenantId', 'graphClientId', 'graphSender'] as $required) {
+            if (($current['smtp'][$required] ?? '') === '') {
+                throw new RuntimeException('Microsoft Graph mode requires tenant ID, client ID, and sender mailbox.');
+            }
+        }
 
-    $plainPassword = (string) ($smtp['password'] ?? '');
-    if ($plainPassword !== '') {
-        $current['smtp']['encryptedPassword'] = app_encrypt_secret($plainPassword);
-    }
-
-    if ($current['smtp']['deliveryMode'] === 'smtp' && ($current['smtp']['encryptedPassword'] ?? '') === '') {
-        throw new RuntimeException('SMTP mode requires a password.');
+        if (($current['smtp']['encryptedGraphClientSecret'] ?? '') === '') {
+            throw new RuntimeException('Microsoft Graph mode requires a client secret.');
+        }
     }
 
     return $current;
@@ -1291,6 +1322,9 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
     if ($deliveryMode === 'smtp') {
         app_send_smtp($settings, $recipientEmail, $recipientName, $subject, $body, $pdfPath);
         $message = 'Certificate sent by SMTP to ' . ($recipientEmail !== '' ? $recipientEmail : $recipientName) . ' with certificate.pdf attached.';
+    } elseif ($deliveryMode === 'graph') {
+        app_send_graph($settings, $recipientEmail, $recipientName, $subject, $body, $pdfPath);
+        $message = 'Certificate sent by Microsoft Graph to ' . ($recipientEmail !== '' ? $recipientEmail : $recipientName) . ' with certificate.pdf attached.';
     } else {
         $message = 'Certificate rendered and logged for ' . ($recipientEmail !== '' ? $recipientEmail : $recipientName) . ' with certificate.pdf attached.';
     }
@@ -1347,7 +1381,7 @@ function app_smtp_diagnostics(array $input, array $actor): array
 
     $generatedAt = app_now();
     try {
-        $settings = app_normalize_settings(is_array($input['settings'] ?? null) ? $input['settings'] : [], app_settings());
+        $settings = app_normalize_settings(is_array($input['settings'] ?? null) ? $input['settings'] : [], app_settings(), false);
     } catch (Throwable $error) {
         app_audit('settings.smtp_diagnostics_failed', 'settings', null, [
             'error' => substr($error->getMessage(), 0, 180),
@@ -1364,6 +1398,10 @@ function app_smtp_diagnostics(array $input, array $actor): array
                 'fromAddress' => '',
                 'username' => '',
                 'hasPassword' => false,
+                'graphTenantId' => '',
+                'graphClientId' => '',
+                'graphSender' => '',
+                'hasGraphClientSecret' => false,
             ],
             'checks' => [
                 app_smtp_diagnostic_check('settings_validation', 'Settings validation', 'fail', $error->getMessage()),
@@ -1374,12 +1412,13 @@ function app_smtp_diagnostics(array $input, array $actor): array
     $smtp = $settings['smtp'];
     $checks = app_smtp_diagnostic_checks($settings);
     $hasFailure = count(array_filter($checks, static fn (array $check): bool => ($check['status'] ?? '') === 'fail')) > 0;
-    $canSend = !$hasFailure && ($smtp['deliveryMode'] ?? 'log') === 'smtp';
+    $deliveryMode = (string) ($smtp['deliveryMode'] ?? 'log');
+    $canSend = !$hasFailure && in_array($deliveryMode, ['smtp', 'graph'], true);
 
     app_audit('settings.smtp_diagnostics_ran', 'settings', null, [
         'host' => (string) ($smtp['host'] ?? ''),
         'port' => (int) ($smtp['port'] ?? 587),
-        'mode' => (string) ($smtp['deliveryMode'] ?? 'log'),
+        'mode' => $deliveryMode,
         'can_send' => $canSend,
     ]);
 
@@ -1387,7 +1426,7 @@ function app_smtp_diagnostics(array $input, array $actor): array
         'generatedAt' => $generatedAt,
         'canSend' => $canSend,
         'summary' => [
-            'deliveryMode' => (string) ($smtp['deliveryMode'] ?? 'log'),
+            'deliveryMode' => $deliveryMode,
             'host' => (string) ($smtp['host'] ?? ''),
             'port' => (int) ($smtp['port'] ?? 587),
             'encryption' => strtoupper((string) ($smtp['encryption'] ?? 'tls')),
@@ -1395,6 +1434,10 @@ function app_smtp_diagnostics(array $input, array $actor): array
             'fromName' => (string) ($smtp['fromName'] ?? ''),
             'username' => (string) ($smtp['username'] ?? ''),
             'hasPassword' => (string) ($smtp['encryptedPassword'] ?? '') !== '',
+            'graphTenantId' => (string) ($smtp['graphTenantId'] ?? ''),
+            'graphClientId' => (string) ($smtp['graphClientId'] ?? ''),
+            'graphSender' => (string) ($smtp['graphSender'] ?? ''),
+            'hasGraphClientSecret' => (string) ($smtp['encryptedGraphClientSecret'] ?? '') !== '',
         ],
         'checks' => $checks,
     ];
@@ -1418,9 +1461,18 @@ function app_smtp_diagnostic_checks(array $settings): array
     $checks[] = app_smtp_diagnostic_check(
         'delivery_mode',
         'Delivery mode',
-        $mode === 'smtp' ? 'pass' : 'warn',
-        $mode === 'smtp' ? 'SMTP sending is enabled.' : 'Local log mode is active; messages are rendered and logged without contacting SMTP.'
+        in_array($mode, ['smtp', 'graph'], true) ? 'pass' : 'warn',
+        match ($mode) {
+            'smtp' => 'SMTP sending is enabled.',
+            'graph' => 'Microsoft Graph sending is enabled.',
+            default => 'Local log mode is active; messages are rendered and logged without contacting a mail provider.',
+        }
     );
+
+    if ($mode === 'graph') {
+        return array_merge($checks, app_graph_diagnostic_checks($settings));
+    }
+
     $checks[] = app_smtp_diagnostic_check(
         'phpmailer',
         'PHPMailer library',
@@ -1499,6 +1551,83 @@ function app_smtp_diagnostic_checks(array $settings): array
 
     if ($mode === 'smtp' && $host !== '' && $port >= 1 && $port <= 65535) {
         $checks[] = app_smtp_connectivity_check($host, $port, $encryption);
+    }
+
+    return $checks;
+}
+
+/**
+ * @return list<array{name:string,label:string,status:string,detail:string}>
+ */
+function app_graph_diagnostic_checks(array $settings): array
+{
+    $smtp = $settings['smtp'];
+    $tenantId = trim((string) ($smtp['graphTenantId'] ?? ''));
+    $clientId = trim((string) ($smtp['graphClientId'] ?? ''));
+    $sender = trim((string) ($smtp['graphSender'] ?? ''));
+    $hasSecret = (string) ($smtp['encryptedGraphClientSecret'] ?? '') !== '';
+    $checks = [];
+
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_curl',
+        'cURL extension',
+        extension_loaded('curl') ? 'pass' : 'fail',
+        extension_loaded('curl') ? 'cURL is loaded for Microsoft identity and Graph API requests.' : 'Enable the PHP cURL extension before using Microsoft Graph delivery.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_tenant',
+        'Graph tenant',
+        $tenantId !== '' ? 'pass' : 'fail',
+        $tenantId !== '' ? $tenantId : 'Set the Microsoft Entra tenant ID or tenant domain.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_client',
+        'Graph client ID',
+        $clientId !== '' ? 'pass' : 'fail',
+        $clientId !== '' ? 'Client ID is configured.' : 'Set the Microsoft Entra application client ID.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_secret',
+        'Graph client secret',
+        $hasSecret ? 'pass' : 'fail',
+        $hasSecret ? 'Encrypted client secret is saved or included in the current form.' : 'Set the Microsoft Entra application client secret.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_sender',
+        'Graph sender mailbox',
+        filter_var($sender, FILTER_VALIDATE_EMAIL) ? 'pass' : 'fail',
+        filter_var($sender, FILTER_VALIDATE_EMAIL) ? $sender : 'Set a valid licensed Exchange Online mailbox address.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'graph_mail_send_permission',
+        'Graph Mail.Send permission',
+        'warn',
+        'The app registration must have Microsoft Graph Mail.Send application permission with admin consent, and the sender mailbox must be allowed by tenant policy.'
+    );
+
+    $readyForTokenCheck = extension_loaded('curl')
+        && $tenantId !== ''
+        && $clientId !== ''
+        && $hasSecret
+        && filter_var($sender, FILTER_VALIDATE_EMAIL);
+
+    if ($readyForTokenCheck) {
+        try {
+            app_graph_access_token($settings);
+            $checks[] = app_smtp_diagnostic_check(
+                'graph_token',
+                'Graph OAuth token',
+                'pass',
+                'Microsoft identity accepted the tenant, client ID, and client secret.'
+            );
+        } catch (Throwable $error) {
+            $checks[] = app_smtp_diagnostic_check(
+                'graph_token',
+                'Graph OAuth token',
+                'fail',
+                app_graph_public_error_message($error)
+            );
+        }
     }
 
     return $checks;
@@ -1586,7 +1715,7 @@ function app_send_smtp_test_email(array $input, array $actor): array
     $recipientEmail = strtolower(trim((string) ($input['recipientEmail'] ?? '')));
     $recipientName = trim((string) ($input['recipientName'] ?? ''));
     if ($recipientName === '') {
-        $recipientName = (string) ($actor['name'] ?? 'SMTP test recipient');
+        $recipientName = (string) ($actor['name'] ?? 'Delivery test recipient');
     }
     if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
         throw new RuntimeException('A valid test recipient email is required.');
@@ -1594,50 +1723,70 @@ function app_send_smtp_test_email(array $input, array $actor): array
 
     $settings = app_normalize_settings(is_array($input['settings'] ?? null) ? $input['settings'] : [], app_settings());
     $smtp = $settings['smtp'];
-    if (($smtp['deliveryMode'] ?? 'log') !== 'smtp') {
-        throw new RuntimeException('Switch delivery mode to SMTP before sending a test email.');
+    $deliveryMode = (string) ($smtp['deliveryMode'] ?? 'log');
+    if (!in_array($deliveryMode, ['smtp', 'graph'], true)) {
+        throw new RuntimeException('Switch delivery mode to SMTP or Microsoft Graph before sending a test email.');
     }
 
     $platformName = htmlspecialchars((string) ($settings['platform']['name'] ?? 'Certificate Issuer'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $hostLabel = htmlspecialchars((string) ($smtp['host'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $fromAddress = htmlspecialchars((string) ($smtp['fromAddress'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $encryption = htmlspecialchars(strtoupper((string) ($smtp['encryption'] ?? 'tls')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $graphSender = htmlspecialchars((string) ($smtp['graphSender'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $sentAt = app_now();
-    $subject = 'Certificate Issuer SMTP test';
+    $subject = 'Certificate Issuer delivery test';
     $body = '<p>This is a test email from ' . $platformName . '.</p>'
-        . '<p>If you received this message, the configured SMTP host, port, encryption, username, password, and sender address can send email successfully.</p>'
-        . '<dl>'
-        . '<dt>SMTP host</dt><dd>' . $hostLabel . ':' . (int) ($smtp['port'] ?? 587) . '</dd>'
-        . '<dt>Encryption</dt><dd>' . $encryption . '</dd>'
-        . '<dt>From</dt><dd>' . $fromAddress . '</dd>'
-        . '<dt>Sent at</dt><dd>' . htmlspecialchars($sentAt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</dd>'
-        . '</dl>';
+        . '<p>If you received this message, the configured delivery provider can send platform email successfully.</p>';
+
+    if ($deliveryMode === 'smtp') {
+        $body .= '<dl>'
+            . '<dt>SMTP host</dt><dd>' . $hostLabel . ':' . (int) ($smtp['port'] ?? 587) . '</dd>'
+            . '<dt>Encryption</dt><dd>' . $encryption . '</dd>'
+            . '<dt>From</dt><dd>' . $fromAddress . '</dd>'
+            . '<dt>Sent at</dt><dd>' . htmlspecialchars($sentAt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</dd>'
+            . '</dl>';
+    } else {
+        $body .= '<dl>'
+            . '<dt>Microsoft Graph sender</dt><dd>' . $graphSender . '</dd>'
+            . '<dt>Sent at</dt><dd>' . htmlspecialchars($sentAt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</dd>'
+            . '</dl>';
+    }
 
     try {
-        app_send_smtp_message($settings, $recipientEmail, $recipientName, $subject, $body);
+        if ($deliveryMode === 'smtp') {
+            app_send_smtp_message($settings, $recipientEmail, $recipientName, $subject, $body);
+        } else {
+            app_send_graph_message($settings, $recipientEmail, $recipientName, $subject, $body);
+        }
     } catch (Throwable $error) {
-        $publicError = app_smtp_public_error_message($error, $smtp);
+        $publicError = $deliveryMode === 'smtp' ? app_smtp_public_error_message($error, $smtp) : app_graph_public_error_message($error);
         app_audit('settings.smtp_test_failed', 'settings', null, [
             'recipient_hash' => hash('sha256', $recipientEmail),
             'host' => (string) ($smtp['host'] ?? ''),
             'port' => (int) ($smtp['port'] ?? 587),
+            'mode' => $deliveryMode,
+            'sender' => $deliveryMode === 'graph' ? (string) ($smtp['graphSender'] ?? '') : (string) ($smtp['fromAddress'] ?? ''),
             'error' => substr($publicError, 0, 180),
         ]);
-        throw new RuntimeException('SMTP test failed: ' . $publicError, 0, $error);
+        throw new RuntimeException(($deliveryMode === 'smtp' ? 'SMTP' : 'Microsoft Graph') . ' test failed: ' . $publicError, 0, $error);
     }
 
     app_audit('settings.smtp_test_sent', 'settings', null, [
         'recipient_hash' => hash('sha256', $recipientEmail),
         'host' => (string) ($smtp['host'] ?? ''),
         'port' => (int) ($smtp['port'] ?? 587),
+        'mode' => $deliveryMode,
+        'sender' => $deliveryMode === 'graph' ? (string) ($smtp['graphSender'] ?? '') : (string) ($smtp['fromAddress'] ?? ''),
     ]);
 
     return [
         'recipientEmail' => $recipientEmail,
         'sentAt' => $sentAt,
+        'transport' => $deliveryMode,
         'host' => (string) ($smtp['host'] ?? ''),
         'port' => (int) ($smtp['port'] ?? 587),
         'encryption' => (string) ($smtp['encryption'] ?? 'tls'),
+        'sender' => $deliveryMode === 'graph' ? (string) ($smtp['graphSender'] ?? '') : (string) ($smtp['fromAddress'] ?? ''),
     ];
 }
 
@@ -1659,6 +1808,29 @@ function app_smtp_public_error_message(Throwable $error, array $smtp): string
     }
 
     return $message !== '' ? $message : 'The SMTP server rejected the test message.';
+}
+
+function app_graph_public_error_message(Throwable $error): string
+{
+    $message = trim($error->getMessage());
+    $normalized = strtolower($message);
+
+    if (str_contains($normalized, 'invalid_client')
+        || str_contains($normalized, 'invalid secret')
+        || str_contains($normalized, 'aadsts7000215')
+        || str_contains($normalized, 'authentication')) {
+        return 'Microsoft Graph authentication was rejected. Confirm the tenant ID, client ID, current client secret, and that the application is using client credentials. Server response: ' . $message;
+    }
+
+    if (str_contains($normalized, 'authorization_requestdenied')
+        || str_contains($normalized, 'mail.send')
+        || str_contains($normalized, 'permission')
+        || str_contains($normalized, 'privilege')
+        || str_contains($normalized, 'access is denied')) {
+        return 'Microsoft Graph rejected the send request. Confirm the app registration has Microsoft Graph Mail.Send application permission, admin consent was granted, and the sender mailbox is allowed by tenant policy. Server response: ' . $message;
+    }
+
+    return $message !== '' ? $message : 'Microsoft Graph rejected the request.';
 }
 
 function app_send_smtp(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, string $pdfPath): void
@@ -1706,6 +1878,214 @@ function app_send_smtp_message(array $settings, string $recipientEmail, string $
         $mail->addAttachment($pdfPath, 'certificate.pdf', 'base64', 'application/pdf');
     }
     $mail->send();
+}
+
+function app_send_graph(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, string $pdfPath): void
+{
+    app_send_graph_message($settings, $recipientEmail, $recipientName, $subject, $body, $pdfPath);
+}
+
+function app_send_graph_message(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, ?string $pdfPath = null): void
+{
+    $smtp = $settings['smtp'];
+    foreach (['graphTenantId', 'graphClientId', 'graphSender'] as $required) {
+        if (($smtp[$required] ?? '') === '') {
+            throw new RuntimeException('Microsoft Graph delivery is enabled but required settings are missing.');
+        }
+    }
+
+    if (($smtp['encryptedGraphClientSecret'] ?? '') === '') {
+        throw new RuntimeException('Microsoft Graph delivery is enabled but the client secret is missing.');
+    }
+
+    if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Recipient email is invalid.');
+    }
+    if (!filter_var((string) ($smtp['graphSender'] ?? ''), FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('Microsoft Graph sender mailbox is invalid.');
+    }
+
+    $message = [
+        'subject' => $subject,
+        'body' => [
+            'contentType' => 'HTML',
+            'content' => $body,
+        ],
+        'toRecipients' => [
+            [
+                'emailAddress' => [
+                    'address' => $recipientEmail,
+                    'name' => $recipientName,
+                ],
+            ],
+        ],
+    ];
+
+    if ($pdfPath !== null) {
+        if (!is_file($pdfPath)) {
+            throw new RuntimeException('Email attachment was not found.');
+        }
+
+        $fileSize = filesize($pdfPath);
+        if ($fileSize === false) {
+            throw new RuntimeException('Email attachment size could not be read.');
+        }
+        if ($fileSize > 3 * 1024 * 1024) {
+            throw new RuntimeException('Microsoft Graph direct send supports certificate attachments up to 3 MB in this delivery path.');
+        }
+
+        $content = file_get_contents($pdfPath);
+        if ($content === false) {
+            throw new RuntimeException('Email attachment could not be read.');
+        }
+
+        $message['attachments'] = [
+            [
+                '@odata.type' => '#microsoft.graph.fileAttachment',
+                'name' => 'certificate.pdf',
+                'contentType' => 'application/pdf',
+                'contentBytes' => base64_encode($content),
+            ],
+        ];
+    }
+
+    $sender = (string) $smtp['graphSender'];
+    $token = app_graph_access_token($settings);
+    app_graph_post_json(
+        'https://graph.microsoft.com/v1.0/users/' . rawurlencode($sender) . '/sendMail',
+        $token,
+        [
+            'message' => $message,
+            'saveToSentItems' => true,
+        ]
+    );
+}
+
+function app_graph_access_token(array $settings): string
+{
+    if (!extension_loaded('curl')) {
+        throw new RuntimeException('PHP cURL extension is required for Microsoft Graph delivery.');
+    }
+
+    $smtp = $settings['smtp'];
+    $tenantId = trim((string) ($smtp['graphTenantId'] ?? ''));
+    $clientId = trim((string) ($smtp['graphClientId'] ?? ''));
+    $clientSecret = app_decrypt_secret((string) ($smtp['encryptedGraphClientSecret'] ?? ''));
+    if ($tenantId === '' || $clientId === '' || $clientSecret === '') {
+        throw new RuntimeException('Microsoft Graph tenant ID, client ID, and client secret are required.');
+    }
+
+    $response = app_curl_post_form(
+        'https://login.microsoftonline.com/' . rawurlencode($tenantId) . '/oauth2/v2.0/token',
+        [
+            'client_id' => $clientId,
+            'scope' => 'https://graph.microsoft.com/.default',
+            'client_secret' => $clientSecret,
+            'grant_type' => 'client_credentials',
+        ]
+    );
+    if ($response['status'] < 200 || $response['status'] >= 300) {
+        throw new RuntimeException(app_graph_response_error($response['body'], 'Microsoft identity rejected the token request.'));
+    }
+
+    $decoded = json_decode($response['body'], true);
+    if (!is_array($decoded) || trim((string) ($decoded['access_token'] ?? '')) === '') {
+        throw new RuntimeException('Microsoft identity returned an invalid token response.');
+    }
+
+    return (string) $decoded['access_token'];
+}
+
+/**
+ * @return array{status:int,body:string}
+ */
+function app_curl_post_form(string $url, array $fields): array
+{
+    $curl = curl_init($url);
+    if ($curl === false) {
+        throw new RuntimeException('Unable to initialize HTTP client.');
+    }
+
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+        CURLOPT_POSTFIELDS => http_build_query($fields, '', '&', PHP_QUERY_RFC3986),
+    ]);
+
+    $body = curl_exec($curl);
+    if ($body === false) {
+        $error = curl_error($curl);
+        curl_close($curl);
+        throw new RuntimeException('HTTP request failed: ' . $error);
+    }
+
+    $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    curl_close($curl);
+    return ['status' => $status, 'body' => (string) $body];
+}
+
+function app_graph_post_json(string $url, string $token, array $payload): void
+{
+    if (!extension_loaded('curl')) {
+        throw new RuntimeException('PHP cURL extension is required for Microsoft Graph delivery.');
+    }
+
+    $body = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    $curl = curl_init($url);
+    if ($curl === false) {
+        throw new RuntimeException('Unable to initialize HTTP client.');
+    }
+
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $body,
+    ]);
+
+    $responseBody = curl_exec($curl);
+    if ($responseBody === false) {
+        $error = curl_error($curl);
+        curl_close($curl);
+        throw new RuntimeException('HTTP request failed: ' . $error);
+    }
+
+    $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    curl_close($curl);
+    if (!in_array($status, [200, 202, 204], true)) {
+        throw new RuntimeException(app_graph_response_error((string) $responseBody, 'Microsoft Graph rejected the sendMail request.'));
+    }
+}
+
+function app_graph_response_error(string $body, string $fallback): string
+{
+    $decoded = json_decode($body, true);
+    $message = '';
+    if (is_array($decoded)) {
+        if (is_array($decoded['error'] ?? null)) {
+            $message = trim((string) ($decoded['error']['message'] ?? $decoded['error']['code'] ?? ''));
+        } elseif (is_string($decoded['error_description'] ?? null)) {
+            $message = trim((string) $decoded['error_description']);
+        } elseif (is_string($decoded['error'] ?? null)) {
+            $message = trim((string) $decoded['error']);
+        }
+    }
+
+    if ($message === '') {
+        $message = trim(strip_tags($body));
+    }
+
+    if ($message === '') {
+        return $fallback;
+    }
+
+    return $fallback . ' Server response: ' . substr($message, 0, 700);
 }
 
 function app_verify_certificate_lookup(string $certificateNumber, string $token): ?array

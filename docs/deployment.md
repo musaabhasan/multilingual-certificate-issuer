@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide describes a production deployment pattern for organizations that need controlled hosting, secure storage, and reliable SMTP delivery.
+This guide describes a production deployment pattern for organizations that need controlled hosting, secure storage, and reliable email delivery.
 
 ## Recommended Topology
 
@@ -10,7 +10,7 @@ This guide describes a production deployment pattern for organizations that need
 | Web | PHP 8.3 with Apache or Nginx + PHP-FPM |
 | Database | Managed MySQL 8.0 or hardened self-hosted MySQL |
 | Storage | Encrypted local disk or approved object storage |
-| SMTP | Institutional mail server with TLS |
+| Email delivery | Institutional SMTP with TLS or Microsoft Graph Mail.Send over HTTPS |
 | Queue | CRON or supervisor-managed PHP worker |
 | Backups | Encrypted and stored in approved backup locations |
 
@@ -22,7 +22,7 @@ This guide describes a production deployment pattern for organizations that need
 4. Set `APP_DEBUG=false`.
 5. Configure storage permissions so the web server can write only to approved directories.
 6. Configure a worker process for scheduled delivery.
-7. Restrict outbound network traffic to approved SMTP hosts.
+7. Restrict outbound network traffic to approved SMTP hosts and Microsoft identity or Graph endpoints when Graph delivery is used.
 
 ## Apache/Nginx Hardening
 
@@ -55,13 +55,13 @@ stdout_logfile=/var/www/certificate-issuer/storage/logs/worker.log
 ## Backup Requirements
 
 - MySQL dump or managed backup.
-- `storage/app` for platform settings, users, encrypted SMTP passwords, state, audit logs, and rate limits.
+- `storage/app` for platform settings, users, encrypted SMTP passwords or Graph client secrets, state, audit logs, and rate limits.
 - Generated certificate storage.
 - Uploaded backgrounds.
-- Encrypted SMTP profiles.
+- Encrypted delivery profiles.
 - Application key backup in a secure vault.
 
-The application key is required to decrypt SMTP credentials. Store it separately from database backups.
+The application key is required to decrypt delivery credentials. Store it separately from database backups.
 
 ## Queue Concurrency
 
@@ -75,7 +75,7 @@ Set `QUEUE_STALE_PROCESSING_MINUTES` to the longest expected SMTP delivery windo
 
 - HTTPS configured.
 - Administrator setup, password policy, and MFA enrollment tested.
-- SMTP test message sent.
+- Delivery test message sent through the selected SMTP or Microsoft Graph provider.
 - Arabic PDF rendering verified.
 - English PDF rendering verified.
 - Queue throttle tested.

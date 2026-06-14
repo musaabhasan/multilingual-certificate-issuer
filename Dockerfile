@@ -3,6 +3,7 @@ FROM php:8.3-apache
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
+        libcurl4-openssl-dev \
         libfreetype6-dev \
         libicu-dev \
         libjpeg62-turbo-dev \
@@ -10,7 +11,7 @@ RUN apt-get update \
         libzip-dev \
         unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install gd intl pdo_mysql zip \
+    && docker-php-ext-install curl gd intl pdo_mysql zip \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 

@@ -31,6 +31,15 @@ function setQueueStatus(text, state = "ready") {
 
 function renderSmtpProfile() {
   const smtp = queueStore.settings().smtp || {};
+  if (smtp.deliveryMode === "graph") {
+    document.querySelector("#smtpMode").textContent = "Microsoft Graph sending";
+    document.querySelector("#smtpHost").textContent = smtp.graphTenantId ? `Tenant: ${smtp.graphTenantId}` : "Tenant not configured";
+    document.querySelector("#smtpEncryption").textContent = "HTTPS";
+    document.querySelector("#smtpCredential").textContent = smtp.hasGraphClientSecret ? "Encrypted client secret saved" : "No client secret saved";
+    document.querySelector("#smtpFrom").textContent = smtp.graphSender || "Not configured";
+    return;
+  }
+
   document.querySelector("#smtpMode").textContent = smtp.deliveryMode === "smtp" ? "SMTP sending" : "Render and log locally";
   document.querySelector("#smtpHost").textContent = smtp.host ? `${smtp.host}:${smtp.port || 587}` : "Not configured";
   document.querySelector("#smtpEncryption").textContent = (smtp.encryption || "tls").toUpperCase();
