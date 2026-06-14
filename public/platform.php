@@ -1258,6 +1258,19 @@ function app_dispatch_due_campaigns(): array
         }
 
         if ($endAt !== null && $now > $endAt) {
+            $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
+            $counts = app_recipient_status_counts($queue);
+            $pending = max((int) $counts['recipients'] - (int) $counts['sent'] - (int) $counts['failed'], 0);
+            if ($pending > 0 && trim((string) ($campaign['windowExpiredAt'] ?? '')) === '') {
+                $campaign['windowExpiredAt'] = app_now();
+                $campaign['updatedAt'] = app_now();
+                $campaign['deliveryEvents'] = array_slice([
+                    ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
+                    ['at' => app_now(), 'message' => 'Delivery window ended with queued recipients. Extend the campaign end time to continue scheduled sending.'],
+                ], -80);
+                $state['campaigns'][$index] = $campaign;
+                $changed = true;
+            }
             continue;
         }
 

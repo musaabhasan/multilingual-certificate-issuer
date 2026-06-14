@@ -324,6 +324,7 @@
       throttleSeconds: Number(campaign.throttleSeconds || 60),
       windowStartAt: campaign.windowStartAt || campaign.scheduledAt || "",
       windowEndAt: campaign.windowEndAt || "",
+      windowExpiredAt: campaign.windowExpiredAt || "",
       randomDelayMinSeconds: randomMin,
       randomDelayMaxSeconds: Math.max(randomMin, randomMax),
       templateSource: campaign.templateSource || "saved_template",

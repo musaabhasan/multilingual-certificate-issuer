@@ -9,6 +9,8 @@ let queueActionInFlight = false;
 function renderQueue() {
   const summary = queueStore.summary();
   const campaigns = queueStore.campaigns();
+  const deliverableCampaigns = campaigns.filter((campaign) => ["scheduled", "running"].includes(campaign.status) && !isWindowExpired(campaign));
+  const expiredCampaigns = campaigns.filter((campaign) => ["scheduled", "running"].includes(campaign.status) && isWindowExpired(campaign));
   const activePlans = campaigns
     .filter((campaign) => ["scheduled", "running"].includes(campaign.status))
     .map((campaign) => queueStore.deliveryPlan(campaign));
@@ -18,8 +20,10 @@ function renderQueue() {
   document.querySelector("#queueSent").textContent = String(summary.sent);
   document.querySelector("#queueFailed").textContent = String(summary.failed);
   document.querySelector("#queueSpacing").textContent = queueStore.formatDuration(slowestSpacing);
-  queueWorkerStatus.textContent = `${summary.activeCampaigns} active lanes`;
-  queueWorkerStatus.className = "status ready";
+  queueWorkerStatus.textContent = expiredCampaigns.length > 0
+    ? `${deliverableCampaigns.length} active lanes, ${expiredCampaigns.length} ended windows`
+    : `${deliverableCampaigns.length} active lanes`;
+  queueWorkerStatus.className = expiredCampaigns.length > 0 ? "status warning" : "status ready";
   renderSmtpProfile();
 
   queueCampaignList.innerHTML = campaigns.map((campaign) => renderCampaignQueue(campaign)).join("");
@@ -56,7 +60,11 @@ function renderCampaignQueue(campaign) {
   const failed = Number(campaign.failed || 0);
   const pending = Math.max(recipients - sent - failed, 0);
   const progress = recipients > 0 ? Math.round((sent / recipients) * 100) : 0;
-  const planClass = plan.fitsMinimumWindow ? "status ready" : "status warning";
+  const expired = isWindowExpired(campaign, plan);
+  const planClass = !expired && plan.fitsMinimumWindow ? "status ready" : "status warning";
+  const planLabel = expired
+    ? "Delivery window ended. Extend the end time to continue scheduled sending."
+    : (plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer");
   const events = (campaign.deliveryEvents || []).slice(-4).reverse();
   const recipientRows = (campaign.recipientQueue || []).slice(0, 10);
 
@@ -84,7 +92,25 @@ function renderCampaignQueue(campaign) {
         <div><dt>Subject</dt><dd>${escapeHtml(campaign.emailSubject || "Your certificate is ready")}</dd></div>
         <div><dt>Attachment</dt><dd><span class="pill sent">certificate.pdf</span></dd></div>
       </dl>
-      <span class="${planClass}">${plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer"}</span>
+      <span class="${planClass}">${escapeHtml(planLabel)}</span>
+      <div class="campaign-assets">
+        <h4>Schedule and buffer</h4>
+        <div class="asset-grid">
+          <label>Send start
+            <input data-schedule-start="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowStartAt || campaign.scheduledAt))}">
+          </label>
+          <label>Send end
+            <input data-schedule-end="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowEndAt))}">
+          </label>
+          <label>Random delay min seconds
+            <input data-schedule-min="${escapeHtml(campaign.id)}" type="number" min="0" value="${Number(campaign.randomDelayMinSeconds || 0)}">
+          </label>
+          <label>Random delay max seconds
+            <input data-schedule-max="${escapeHtml(campaign.id)}" type="number" min="0" value="${Number(campaign.randomDelayMaxSeconds || 0)}">
+          </label>
+          <button type="button" data-action="save-schedule" data-id="${escapeHtml(campaign.id)}">Save schedule</button>
+        </div>
+      </div>
       <div class="email-preview">
         <strong>Email body</strong>
         <pre>${escapeHtml(campaign.emailBodyHtml || "<p>Your certificate is attached as a PDF.</p>")}</pre>
@@ -168,6 +194,10 @@ queueCampaignList.addEventListener("click", async (event) => {
       await queueStore.completeCampaignAsync(button.dataset.id);
       renderQueue();
       setQueueStatus("Campaign closed", "ready");
+    } else if (button.dataset.action === "save-schedule") {
+      saveCampaignSchedule(button.dataset.id);
+      renderQueue();
+      setQueueStatus("Campaign schedule updated", "ready");
     } else {
       await queueStore.updateCampaignStatusAsync(button.dataset.id, button.dataset.action);
       renderQueue();
@@ -187,6 +217,7 @@ refreshQueue.addEventListener("click", refreshQueueState);
 function nextSendLabel(campaign, plan) {
   if (campaign.status === "completed") return "Done";
   if (campaign.status === "paused") return "Paused";
+  if (isWindowExpired(campaign, plan)) return "Window ended";
   if (campaign.nextSendAfterAt) return shortTime(campaign.nextSendAfterAt);
   if (!plan.start || plan.recipients === 0) return "Not scheduled";
   if (Number(campaign.sent || 0) >= plan.recipients) return "Done";
@@ -198,6 +229,78 @@ function nextSendLabel(campaign, plan) {
 function windowLabel(campaign) {
   if (!campaign.windowStartAt && !campaign.windowEndAt) return "Not set";
   return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "?"}`;
+}
+
+function saveCampaignSchedule(campaignId) {
+  const campaign = queueStore.findCampaign(campaignId);
+  if (!campaign) {
+    throw new Error("Campaign not found.");
+  }
+
+  const startValue = document.querySelector(`[data-schedule-start="${cssEscape(campaignId)}"]`)?.value || "";
+  const endValue = document.querySelector(`[data-schedule-end="${cssEscape(campaignId)}"]`)?.value || "";
+  const minValue = Number(document.querySelector(`[data-schedule-min="${cssEscape(campaignId)}"]`)?.value || 0);
+  const maxValue = Number(document.querySelector(`[data-schedule-max="${cssEscape(campaignId)}"]`)?.value || 0);
+  const windowStartAt = toIsoDateTime(startValue);
+  const windowEndAt = toIsoDateTime(endValue);
+
+  if (windowStartAt && windowEndAt && new Date(windowEndAt).getTime() <= new Date(windowStartAt).getTime()) {
+    throw new Error("Send end must be after send start.");
+  }
+
+  if (maxValue < minValue) {
+    throw new Error("Random delay max must be greater than or equal to the minimum.");
+  }
+
+  const startDate = windowStartAt ? new Date(windowStartAt) : null;
+  const status = startDate && startDate.getTime() > Date.now() && campaign.status !== "paused"
+    ? "scheduled"
+    : (campaign.status === "draft" ? "scheduled" : campaign.status);
+
+  queueStore.updateCampaign(campaignId, {
+    status,
+    scheduledAt: windowStartAt,
+    windowStartAt,
+    windowEndAt,
+    windowExpiredAt: "",
+    nextSendAfterAt: "",
+    randomDelayMinSeconds: Math.max(0, minValue),
+    randomDelayMaxSeconds: Math.max(minValue, maxValue),
+    throttleSeconds: Math.max(0, minValue),
+    deliveryEvents: addQueueEvent(campaign, "Campaign schedule and send buffer updated.")
+  });
+}
+
+function isWindowExpired(campaign, plan = queueStore.deliveryPlan(campaign)) {
+  if (campaign.status === "completed" || campaign.status === "paused") return false;
+  if (!plan.end) return false;
+
+  const recipients = Number(campaign.recipients || 0);
+  const sent = Number(campaign.sent || 0);
+  const failed = Number(campaign.failed || 0);
+  const pending = Math.max(recipients - sent - failed, 0);
+  return pending > 0 && Date.now() > plan.end.getTime();
+}
+
+function addQueueEvent(campaign, message, date = new Date()) {
+  return [
+    ...(Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents : []),
+    { at: date.toISOString(), message }
+  ].slice(-80);
+}
+
+function toDateTimeInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function toIsoDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function shortTime(value) {
@@ -219,6 +322,14 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll("\n", "&#10;");
+}
+
+function cssEscape(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 setQueueStatus("Loading queue", "pending");
