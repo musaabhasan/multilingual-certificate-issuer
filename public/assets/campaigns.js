@@ -43,6 +43,7 @@ const labelRoles = {
 let lastCampaignImport = null;
 let lastCampaignTemplateUpload = null;
 const recipientFilters = new Map();
+const expandedCampaigns = new Set();
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -51,7 +52,7 @@ function setCampaignLaneStatus(text, state = "ready") {
 
 function renderTemplateOptions() {
   const selected = campaignTemplate.value;
-  const templates = store.templates();
+  const templates = reusableTemplates();
   campaignTemplate.innerHTML = templateOptionsMarkup(selected);
 
   if (selected && templates.some((template) => template.id === selected)) {
@@ -62,15 +63,21 @@ function renderTemplateOptions() {
 }
 
 function templateOptionsMarkup(selectedId = "") {
-  const templates = store.templates();
+  const templates = reusableTemplates();
   if (templates.length === 0) {
-    return '<option value="">No saved templates</option>';
+    return '<option value="">No reusable templates</option>';
   }
 
   return templates.map((template) => {
     const selected = template.id === selectedId ? " selected" : "";
     return `<option value="${escapeHtml(template.id)}"${selected}>${escapeHtml(template.name)} (${escapeHtml(template.status)})</option>`;
   }).join("");
+}
+
+function reusableTemplates() {
+  return typeof store.reusableTemplates === "function"
+    ? store.reusableTemplates()
+    : store.templates().filter((template) => !template.campaignOwned);
 }
 
 function renderMetrics() {
@@ -115,17 +122,33 @@ function renderCampaigns() {
     const randomUnit = store.normalizeDelayUnit(campaign.randomDelayUnit);
     const randomMinAmount = store.delaySecondsToAmount(campaign.randomDelayMinSeconds, randomUnit);
     const randomMaxAmount = store.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
+    const expanded = expandedCampaigns.has(campaign.id);
+    const primaryAction = campaign.status === "running" ? "paused" : "running";
+    const primaryActionLabel = campaign.status === "running" ? "Stop sending" : "Start";
 
     return `
-      <article class="campaign-card">
-        <div class="panel-header">
+      <article class="campaign-card ${expanded ? "expanded" : "collapsed"}">
+        <div class="panel-header campaign-card-header">
           <div>
             <h3>${escapeHtml(campaign.name)}</h3>
             <p>${escapeHtml(template?.name || "No template selected")}</p>
           </div>
-          <span class="${store.statusClass(campaign.status)}">${store.statusLabel(campaign.status)}</span>
+          <div class="campaign-header-actions">
+            <span class="${store.statusClass(campaign.status)}">${store.statusLabel(campaign.status)}</span>
+            <button type="button" data-action="${primaryAction}" data-id="${escapeHtml(campaign.id)}">${primaryActionLabel}</button>
+            <button type="button" data-action="toggle-details" data-id="${escapeHtml(campaign.id)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "Hide details" : "Open details"}</button>
+          </div>
         </div>
         <div class="progress-bar" aria-label="Campaign progress"><span style="width: ${progress}%"></span></div>
+        <div class="campaign-summary-strip" aria-label="Campaign summary">
+          <span><strong>${Number(campaign.recipients || 0)}</strong> recipients</span>
+          <span><strong>${counts.sent}</strong> sent</span>
+          <span><strong>${pending}</strong> pending</span>
+          <span><strong>${counts.failed}</strong> failed</span>
+          <span>${escapeHtml(campaign.importFileName || "No CSV attached")}</span>
+          <span>${escapeHtml(planLabel)}</span>
+        </div>
+        <div class="campaign-details" ${expanded ? "" : "hidden"}>
         <dl class="detail-list compact-details">
           <div><dt>CSV file</dt><dd>${escapeHtml(campaign.importFileName || "No CSV attached")}</dd></div>
           <div><dt>Template source</dt><dd>${escapeHtml(templateSource)}</dd></div>
@@ -198,6 +221,7 @@ function renderCampaigns() {
               <select data-template-select="${escapeHtml(campaign.id)}">${templateOptionsMarkup(campaign.templateId)}</select>
             </label>
             <button type="button" data-action="save-template" data-id="${escapeHtml(campaign.id)}">Use selected template</button>
+            ${campaign.templateId && !campaign.campaignTemplateLayout ? `<a class="button" href="/designer.html?template=${encodeURIComponent(campaign.templateId)}">Edit template</a>` : ""}
             <label>Upload campaign template image
               <input data-template-upload="${escapeHtml(campaign.id)}" type="file" accept="image/png,image/jpeg,image/webp">
             </label>
@@ -227,6 +251,7 @@ function renderCampaigns() {
           <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete</button>
           <a class="button" href="/queue.html">Queue details</a>
         </div>
+        </div>
       </article>
     `;
   }).join("");
@@ -255,6 +280,7 @@ campaignForm.addEventListener("submit", async (event) => {
       templateSource: templateAssignment.templateSource,
       templateFileName: templateAssignment.templateFileName,
       campaignTemplateName: templateAssignment.campaignTemplateName,
+      campaignTemplateLayout: templateAssignment.campaignTemplateLayout || null,
       status: selectedStatus,
       scheduledAt: windowStartAt,
       windowStartAt,
@@ -278,6 +304,8 @@ campaignForm.addEventListener("submit", async (event) => {
     lastCampaignTemplateUpload = null;
     campaignCsvFile.value = "";
     campaignTemplateFile.value = "";
+    expandedCampaigns.clear();
+    expandedCampaigns.add(created.id);
     resetCampaignCsvPreview();
     setTemplateUploadStatus("No template image selected", "locked");
     campaignTemplatePreview.textContent = "Upload a PNG, JPG, or WebP certificate background. Recipient name, program, date, and QR fields will be added automatically.";
@@ -318,7 +346,15 @@ campaignList.addEventListener("click", async (event) => {
   setCampaignLaneStatus("Updating campaign", "pending");
 
   try {
-    if (button.dataset.action === "running") {
+    if (button.dataset.action === "toggle-details") {
+      if (expandedCampaigns.has(button.dataset.id)) {
+        expandedCampaigns.delete(button.dataset.id);
+      } else {
+        expandedCampaigns.add(button.dataset.id);
+      }
+      renderCampaigns();
+      setCampaignLaneStatus("Campaign view updated", "ready");
+    } else if (button.dataset.action === "running") {
       await store.updateCampaignStatusAsync(button.dataset.id, "running");
       render();
       setCampaignLaneStatus("Campaign started. Queue worker will process due recipients.", "ready");
@@ -332,10 +368,16 @@ campaignList.addEventListener("click", async (event) => {
       setCampaignLaneStatus("Campaign closed", "ready");
     } else if (button.dataset.action === "duplicate") {
       const copy = duplicateCampaign(button.dataset.id);
+      expandedCampaigns.clear();
+      expandedCampaigns.add(copy.id);
       render();
       setCampaignLaneStatus(`Duplicated ${copy.name}`, "ready");
     } else if (button.dataset.action === "reuse-campaign") {
       const copy = store.reuseCampaign(button.dataset.id);
+      if (copy?.id) {
+        expandedCampaigns.clear();
+        expandedCampaigns.add(copy.id);
+      }
       render();
       setCampaignLaneStatus(`Reusable campaign created: ${copy?.name || "campaign"}`, "ready");
     } else if (button.dataset.action === "restart-campaign") {
@@ -383,6 +425,7 @@ campaignList.addEventListener("click", async (event) => {
         templateSource: "saved_template",
         templateFileName: "",
         campaignTemplateName: template?.name || "",
+        campaignTemplateLayout: null,
         deliveryEvents: addCampaignEvent(store.findCampaign(button.dataset.id) || {}, `Template changed to ${template?.name || "saved template"}.`)
       });
       render();
@@ -478,18 +521,12 @@ campaignList.addEventListener("change", async (event) => {
       const campaign = store.findCampaign(templateInput.dataset.templateUpload);
       if (!campaign) throw new Error("Campaign not found.");
       const uploaded = await uploadTemplateImage(file);
-      const template = saveCampaignTemplate({
-        campaign,
-        templateName: campaign.campaignTemplateName || `${campaign.name} certificate template`,
-        upload: uploaded,
-        fit: "stretch",
-        replaceExistingOwnedTemplate: true
-      });
       store.updateCampaign(campaign.id, {
-        templateId: template.id,
+        templateId: campaign.templateId || campaignTemplateUploadId(campaign.name),
         templateSource: "campaign_upload",
         templateFileName: uploaded.originalName,
-        campaignTemplateName: template.name,
+        campaignTemplateName: campaign.campaignTemplateName || `${campaign.name} certificate template`,
+        campaignTemplateLayout: buildCampaignTemplateLayout(uploaded, "stretch"),
         deliveryEvents: addCampaignEvent(campaign, `Campaign template image changed to ${uploaded.originalName}.`)
       });
       render();
@@ -783,6 +820,7 @@ function duplicateCampaign(campaignId) {
     templateSource: source.templateSource,
     templateFileName: source.templateFileName,
     campaignTemplateName: source.campaignTemplateName,
+    campaignTemplateLayout: source.campaignTemplateLayout || null,
     status: "draft",
     scheduledAt: "",
     windowStartAt: "",
@@ -848,19 +886,14 @@ function createTemplateAssignmentForNewCampaign(campaignName) {
       throw new Error("Upload the campaign template image before creating the campaign.");
     }
 
-    const template = saveCampaignTemplate({
-      campaign: { name: campaignName },
-      templateName: campaignTemplateName.value.trim() || `${campaignName} certificate template`,
-      upload: lastCampaignTemplateUpload,
-      fit: campaignTemplateFit.value,
-      replaceExistingOwnedTemplate: false
-    });
+    const templateName = campaignTemplateName.value.trim() || `${campaignName} certificate template`;
 
     return {
-      templateId: template.id,
+      templateId: campaignTemplateUploadId(campaignName),
       templateSource: "campaign_upload",
       templateFileName: lastCampaignTemplateUpload.originalName,
-      campaignTemplateName: template.name
+      campaignTemplateName: templateName,
+      campaignTemplateLayout: buildCampaignTemplateLayout(lastCampaignTemplateUpload, campaignTemplateFit.value)
     };
   }
 
@@ -873,28 +906,27 @@ function createTemplateAssignmentForNewCampaign(campaignName) {
     templateId: campaignTemplate.value,
     templateSource: "saved_template",
     templateFileName: "",
-    campaignTemplateName: template?.name || ""
+    campaignTemplateName: template?.name || "",
+    campaignTemplateLayout: null
   };
 }
 
-function saveCampaignTemplate({ campaign, templateName, upload, fit, replaceExistingOwnedTemplate }) {
-  const existingTemplate = replaceExistingOwnedTemplate && campaign.templateSource === "campaign_upload"
-    ? store.findTemplate(campaign.templateId)
-    : null;
+function buildCampaignTemplateLayout(upload, fit) {
+  return {
+    page: { width: 297, height: 210, orientation: "landscape" },
+    background: upload.path,
+    backgroundFit: normalizeBackgroundFit(fit),
+    elements: defaultCampaignTemplateElements()
+  };
+}
 
-  return store.saveTemplate({
-    id: existingTemplate?.id,
-    name: templateName,
-    status: "approved",
-    campaignOwned: true,
-    campaignId: campaign.id || "",
-    layout: {
-      page: { width: 297, height: 210, orientation: "landscape" },
-      background: upload.path,
-      backgroundFit: normalizeBackgroundFit(fit),
-      elements: defaultCampaignTemplateElements()
-    }
-  });
+function campaignTemplateUploadId(name) {
+  const slug = String(name || "campaign")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48) || "campaign";
+  return `campaign-template-${slug}-${Date.now().toString(36)}`;
 }
 
 function defaultCampaignTemplateElements() {

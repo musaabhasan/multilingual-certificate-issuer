@@ -383,6 +383,10 @@
     return getState().templates;
   }
 
+  function reusableTemplates() {
+    return templates().filter((template) => !template.campaignOwned);
+  }
+
   function campaigns() {
     return getState().campaigns;
   }
@@ -828,6 +832,16 @@
   }
 
   function campaignTemplate(campaign) {
+    if (campaign && campaign.campaignTemplateLayout && typeof campaign.campaignTemplateLayout === "object") {
+      return {
+        id: campaign.templateId || "",
+        name: campaign.campaignTemplateName || campaign.templateFileName || "Campaign template",
+        status: "approved",
+        campaignOwned: true,
+        layout: campaign.campaignTemplateLayout
+      };
+    }
+
     return findTemplate(campaign.templateId);
   }
 
@@ -875,8 +889,8 @@
     const totalSkipped = state.campaigns.reduce((sum, campaign) => sum + Number(campaign.skipped || 0), 0);
 
     return {
-      templates: state.templates.length,
-      approvedTemplates: state.templates.filter((template) => template.status === "approved").length,
+      templates: state.templates.filter((template) => !template.campaignOwned).length,
+      approvedTemplates: state.templates.filter((template) => !template.campaignOwned && template.status === "approved").length,
       campaigns: state.campaigns.length,
       activeCampaigns: activeCampaigns.length,
       totalRecipients,
@@ -892,6 +906,7 @@
     refreshState,
     settings,
     templates,
+    reusableTemplates,
     campaigns,
     findTemplate,
     findCampaign,

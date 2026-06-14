@@ -1076,6 +1076,22 @@ function app_find_template(array $state, string $templateId): ?array
     return null;
 }
 
+function app_campaign_template(array $state, array $campaign): ?array
+{
+    $layout = $campaign['campaignTemplateLayout'] ?? null;
+    if (is_array($layout)) {
+        return [
+            'id' => (string) ($campaign['templateId'] ?? ''),
+            'name' => (string) ($campaign['campaignTemplateName'] ?? $campaign['templateFileName'] ?? 'Campaign template'),
+            'status' => 'approved',
+            'campaignOwned' => true,
+            'layout' => $layout,
+        ];
+    }
+
+    return app_find_template($state, (string) ($campaign['templateId'] ?? ''));
+}
+
 function app_recipient_status_counts(array $queue): array
 {
     $sent = count(array_filter($queue, fn (array $record): bool => ($record['status'] ?? '') === 'sent'));
@@ -1194,7 +1210,7 @@ function app_send_one(string $campaignId): array
     }
 
     $campaign = $found['campaign'];
-    $template = app_find_template($state, (string) ($campaign['templateId'] ?? ''));
+    $template = app_campaign_template($state, $campaign);
     if ($template === null) {
         throw new RuntimeException('Campaign template not found.');
     }
@@ -1355,7 +1371,7 @@ function app_preview_campaign_recipient(string $campaignId, string $recipientId)
     }
 
     $campaign = $found['campaign'];
-    $template = app_find_template($state, (string) ($campaign['templateId'] ?? ''));
+    $template = app_campaign_template($state, $campaign);
     if ($template === null) {
         throw new RuntimeException('Campaign template not found.');
     }
@@ -2281,7 +2297,7 @@ function app_verify_certificate_lookup(string $certificateNumber, string $token)
                 continue;
             }
 
-            $template = app_find_template($state, (string) ($campaign['templateId'] ?? ''));
+            $template = app_campaign_template($state, $campaign);
             $certificatePath = (string) ($recipient['certificatePath'] ?? '');
             $absolutePath = $certificatePath !== '' ? dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $certificatePath) : '';
             $pdfHash = is_file($absolutePath) ? (string) hash_file('sha256', $absolutePath) : '';

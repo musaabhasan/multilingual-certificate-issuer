@@ -39,7 +39,7 @@
     <section class="designer-layout">
         <aside class="panel tool-panel">
             <h2>Template</h2>
-            <label>Saved templates
+            <label>Reusable templates
                 <select id="templateSelect"></select>
             </label>
             <label>Template name <input id="templateName" type="text" value="New Certificate Template"></label>
@@ -51,8 +51,10 @@
                 </select>
             </label>
             <div class="action-row">
+                <button id="newTemplate" type="button">New draft</button>
                 <button id="loadTemplate" type="button">Load</button>
-                <button id="saveTemplate" class="primary" type="button">Save template</button>
+                <button id="saveTemplate" class="primary" type="button">Save changes</button>
+                <button id="saveTemplateCopy" type="button">Save as copy</button>
             </div>
             <span id="templateSaveStatus" class="status locked">Server templates</span>
 

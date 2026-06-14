@@ -13,8 +13,10 @@ const itemCount = document.querySelector("#itemCount");
 const templateSelect = document.querySelector("#templateSelect");
 const templateName = document.querySelector("#templateName");
 const templateStatus = document.querySelector("#templateStatus");
+const newTemplate = document.querySelector("#newTemplate");
 const loadTemplate = document.querySelector("#loadTemplate");
 const saveTemplate = document.querySelector("#saveTemplate");
+const saveTemplateCopy = document.querySelector("#saveTemplateCopy");
 const templateSaveStatus = document.querySelector("#templateSaveStatus");
 const backgroundFile = document.querySelector("#backgroundFile");
 const backgroundPath = document.querySelector("#backgroundPath");
@@ -99,6 +101,8 @@ let selected = null;
 let offset = { x: 0, y: 0 };
 let backgroundPreviewUrl = "";
 let currentTemplateId = null;
+let templateDirty = false;
+let suppressTemplateDirty = false;
 
 function applyBackgroundPreview() {
   const imageUrl = backgroundPreviewUrl || browserAssetUrl(backgroundPath.value);
@@ -381,6 +385,7 @@ function currentLayout() {
 
 function exportJson() {
   output.value = JSON.stringify(currentLayout(), null, 2);
+  markTemplateDirty();
 }
 
 async function uploadAsset(file, category) {
@@ -415,13 +420,19 @@ function roundMm(value) {
 }
 
 function renderTemplateSelect(selectedId = currentTemplateId) {
-  const templates = window.CertificateIssuerStore.templates();
-  templateSelect.innerHTML = templates.map((template) => (
+  const templates = reusableTemplates();
+  const draftOption = selectedId ? "" : '<option value="">Unsaved draft</option>';
+  templateSelect.innerHTML = templates.length > 0 ? draftOption + templates.map((template) => (
     `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)} (${escapeHtml(template.status)})</option>`
-  )).join("");
+  )).join("") : '<option value="">Unsaved draft</option>';
 
   if (selectedId && templates.some((template) => template.id === selectedId)) {
     templateSelect.value = selectedId;
+  }
+
+  templateSelect.disabled = templates.length === 0;
+  if (!selectedId && templates.length > 0) {
+    templateSelect.value = "";
   }
 }
 
@@ -482,34 +493,98 @@ function loadLayout(layout) {
   exportJson();
 }
 
-function loadSelectedTemplate() {
+function loadSelectedTemplate(options = {}) {
+  if (!options.skipConfirm && !confirmDiscardTemplateChanges()) {
+    renderTemplateSelect(currentTemplateId);
+    return;
+  }
+
   const template = window.CertificateIssuerStore.findTemplate(templateSelect.value);
   if (!template) return;
 
   currentTemplateId = template.id;
   templateName.value = template.name;
   templateStatus.value = template.status;
+  suppressTemplateDirty = true;
   loadLayout(template.layout);
+  suppressTemplateDirty = false;
+  templateDirty = false;
   setTemplateStatus("Template loaded", "status ready");
 }
 
-function saveCurrentTemplate() {
+function saveCurrentTemplate(options = {}) {
   const name = templateName.value.trim() || "Untitled Certificate Template";
+  const saveAsCopy = Boolean(options.asCopy);
   const saved = window.CertificateIssuerStore.saveTemplate({
-    id: currentTemplateId,
-    name,
+    id: saveAsCopy ? "" : currentTemplateId,
+    name: saveAsCopy ? nextTemplateCopyName(name) : name,
     status: templateStatus.value,
     layout: currentLayout()
   });
 
   currentTemplateId = saved.id;
+  templateName.value = saved.name;
   renderTemplateSelect(saved.id);
-  setTemplateStatus("Template saved", "status ready");
+  templateDirty = false;
+  setTemplateStatus(saveAsCopy ? "Template copy saved" : "Template saved", "status ready");
 }
 
 function setTemplateStatus(text, className) {
   templateSaveStatus.textContent = text;
   templateSaveStatus.className = className;
+}
+
+function markTemplateDirty() {
+  if (suppressTemplateDirty) return;
+  templateDirty = true;
+  setTemplateStatus(currentTemplateId ? "Unsaved changes" : "Unsaved draft", "status warning");
+}
+
+function confirmDiscardTemplateChanges() {
+  return !templateDirty || window.confirm("Discard unsaved template changes?");
+}
+
+function reusableTemplates() {
+  return typeof window.CertificateIssuerStore.reusableTemplates === "function"
+    ? window.CertificateIssuerStore.reusableTemplates()
+    : window.CertificateIssuerStore.templates().filter((template) => !template.campaignOwned);
+}
+
+function newBlankTemplate(options = {}) {
+  if (options.confirm !== false && !confirmDiscardTemplateChanges()) return;
+
+  currentTemplateId = null;
+  templateName.value = "New Certificate Template";
+  templateStatus.value = "draft";
+  renderTemplateSelect("");
+  backgroundPath.value = "";
+  backgroundFit.value = "cover";
+  if (backgroundPreviewUrl) {
+    URL.revokeObjectURL(backgroundPreviewUrl);
+  }
+  backgroundPreviewUrl = "";
+  backgroundFile.value = "";
+  canvas.querySelectorAll(".design-item").forEach((item) => item.remove());
+
+  suppressTemplateDirty = true;
+  applyBackgroundPreview();
+  addCsvTextItem({ label: "Recipient Name", source: "name_en", direction: "ltr", align: "center", left: 170, top: 150, width: 190, height: 38 });
+  addCsvTextItem({ label: "Arabic Recipient Name", source: "name_ar", direction: "rtl", align: "center", left: 170, top: 205, width: 190, height: 42, font: "bukra_book_slanted", fontSize: "24" });
+  suppressTemplateDirty = false;
+  exportJson();
+}
+
+function nextTemplateCopyName(name) {
+  const existing = new Set(reusableTemplates().map((template) => String(template.name || "").toLowerCase()));
+  let candidate = `${name} copy`;
+  let count = 2;
+
+  while (existing.has(candidate.toLowerCase())) {
+    candidate = `${name} copy ${count}`;
+    count += 1;
+  }
+
+  return candidate;
 }
 
 function renderFontOptions() {
@@ -642,8 +717,11 @@ exportLayout.addEventListener("click", exportJson);
 applyField.addEventListener("click", applySelectedItem);
 duplicateItem.addEventListener("click", duplicateSelectedItem);
 deleteItem.addEventListener("click", deleteSelectedItem);
-loadTemplate.addEventListener("click", loadSelectedTemplate);
-saveTemplate.addEventListener("click", saveCurrentTemplate);
+newTemplate.addEventListener("click", () => newBlankTemplate());
+loadTemplate.addEventListener("click", () => loadSelectedTemplate());
+saveTemplate.addEventListener("click", () => saveCurrentTemplate());
+saveTemplateCopy.addEventListener("click", () => saveCurrentTemplate({ asCopy: true }));
+templateSelect.addEventListener("change", () => loadSelectedTemplate());
 itemList.addEventListener("click", (event) => {
   const row = event.target.closest("[data-key]");
   if (!row) return;
@@ -733,5 +811,15 @@ applyBackgroundPreview();
 renderFontOptions();
 renderCsvSourceOptions();
 renderTemplateSelect();
-addCsvTextItem({ label: "Recipient Name", source: "name_en", direction: "ltr", align: "center", left: 170, top: 150, width: 190, height: 38 });
-addCsvTextItem({ label: "اسم المستلم", source: "name_ar", direction: "rtl", align: "center", left: 170, top: 205, width: 190, height: 42, font: "bukra_book_slanted", fontSize: "24" });
+const requestedTemplateId = new URLSearchParams(window.location.search).get("template");
+const requestedTemplate = requestedTemplateId ? window.CertificateIssuerStore.findTemplate(requestedTemplateId) : null;
+if (requestedTemplate) {
+  if (![...templateSelect.options].some((option) => option.value === requestedTemplateId)) {
+    templateSelect.appendChild(new Option(`${requestedTemplate.name} (${requestedTemplate.status || "template"})`, requestedTemplate.id));
+    templateSelect.disabled = false;
+  }
+  templateSelect.value = requestedTemplateId;
+  loadSelectedTemplate({ skipConfirm: true });
+} else {
+  newBlankTemplate({ confirm: false });
+}
