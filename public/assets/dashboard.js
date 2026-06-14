@@ -67,5 +67,4 @@ async function refreshDashboard() {
   renderDashboard();
 }
 
-renderDashboard();
 void refreshDashboard();

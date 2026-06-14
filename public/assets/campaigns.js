@@ -232,6 +232,16 @@ function render() {
   renderPlanPreview();
 }
 
+async function initializeCampaigns() {
+  setCampaignLaneStatus("Loading campaigns", "pending");
+  try {
+    await store.refreshState();
+    render();
+  } catch (error) {
+    setCampaignLaneStatus(error.message, "warning");
+  }
+}
+
 function renderPlanPreview() {
   const recipientCount = lastCampaignImport?.records.length || 0;
   const previewCampaign = {
@@ -453,4 +463,4 @@ function cssEscape(value) {
   return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
-render();
+void initializeCampaigns();

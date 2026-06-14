@@ -4,6 +4,7 @@ const queueWorkerStatus = document.querySelector("#queueWorkerStatus");
 const processDueQueue = document.querySelector("#processDueQueue");
 const refreshQueue = document.querySelector("#refreshQueue");
 let queueRefreshInFlight = false;
+let queueActionInFlight = false;
 
 function renderQueue() {
   const summary = queueStore.summary();
@@ -118,7 +119,7 @@ function renderCampaignQueue(campaign) {
 }
 
 async function refreshQueueState() {
-  if (queueRefreshInFlight) return;
+  if (queueRefreshInFlight || queueActionInFlight) return;
   queueRefreshInFlight = true;
 
   try {
@@ -130,8 +131,9 @@ async function refreshQueueState() {
 }
 
 async function processDueRecipients() {
+  queueActionInFlight = true;
   processDueQueue.disabled = true;
-  setQueueStatus("Processing due recipients", "pending");
+  setQueueStatus("Processing one due recipient per active campaign", "pending");
 
   try {
     await queueStore.dispatchDueCampaigns();
@@ -140,6 +142,7 @@ async function processDueRecipients() {
   } catch (error) {
     setQueueStatus(error.message, "warning");
   } finally {
+    queueActionInFlight = false;
     processDueQueue.disabled = false;
   }
 }
@@ -148,6 +151,7 @@ queueCampaignList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
+  queueActionInFlight = true;
   button.disabled = true;
   setQueueStatus("Updating campaign", "pending");
 
@@ -172,6 +176,7 @@ queueCampaignList.addEventListener("click", async (event) => {
   } catch (error) {
     setQueueStatus(error.message, "warning");
   } finally {
+    queueActionInFlight = false;
     button.disabled = false;
   }
 });
@@ -216,6 +221,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-renderQueue();
+setQueueStatus("Loading queue", "pending");
 void refreshQueueState();
 setInterval(refreshQueueState, 5000);

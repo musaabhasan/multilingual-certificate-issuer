@@ -65,16 +65,20 @@ try {
 
     if ($action === 'settings-test-email' && $method === 'POST') {
         app_require_admin($user);
+        $payload = app_json_payload();
+        app_release_session_lock();
         app_json_response([
-            'test' => app_send_smtp_test_email(app_json_payload(), $user),
+            'test' => app_send_smtp_test_email($payload, $user),
             'csrf' => app_csrf_token(),
         ]);
     }
 
     if ($action === 'settings-smtp-diagnostics' && $method === 'POST') {
         app_require_admin($user);
+        $payload = app_json_payload();
+        app_release_session_lock();
         app_json_response([
-            'diagnostics' => app_smtp_diagnostics(app_json_payload(), $user),
+            'diagnostics' => app_smtp_diagnostics($payload, $user),
             'csrf' => app_csrf_token(),
         ]);
     }
@@ -116,6 +120,7 @@ try {
     if ($action === 'send-one' && $method === 'POST') {
         app_require_delivery_access($user);
         $payload = app_json_payload();
+        app_release_session_lock();
         $state = app_send_one((string) ($payload['id'] ?? ''));
         app_json_response([
             'state' => $state,
@@ -151,6 +156,7 @@ try {
 
     if ($action === 'dispatch-due' && $method === 'POST') {
         app_require_delivery_access($user);
+        app_release_session_lock();
         $state = app_dispatch_due_campaigns();
         app_json_response([
             'state' => $state,
@@ -196,5 +202,12 @@ function app_require_admin(array $user): void
 {
     if (($user['role'] ?? '') !== 'administrator') {
         app_json_response(['error' => 'Administrator access required.'], 403);
+    }
+}
+
+function app_release_session_lock(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
     }
 }

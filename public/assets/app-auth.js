@@ -71,10 +71,14 @@
   }
 
   async function api(method, action, payload) {
+    const controller = new AbortController();
+    const timeoutMs = ["send-one", "dispatch-due", "settings-test-email", "settings-smtp-diagnostics"].includes(action) ? 60000 : 15000;
+    const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
     const options = {
       method,
       headers: { Accept: "application/json" },
-      credentials: "same-origin"
+      credentials: "same-origin",
+      signal: controller.signal
     };
     if (method !== "GET") {
       options.headers["Content-Type"] = "application/json";
@@ -82,7 +86,18 @@
       options.body = JSON.stringify(payload || {});
     }
 
-    const response = await fetch(`/api.php?action=${encodeURIComponent(action)}`, options);
+    let response;
+    try {
+      response = await fetch(`/api.php?action=${encodeURIComponent(action)}`, options);
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new Error("Request timed out. If a delivery request is still running, wait a moment and refresh the queue.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+
     const data = await response.json().catch(() => ({}));
     if (response.status === 428 || data.mfaRequired) {
       redirectToMfa();
