@@ -7,6 +7,12 @@ use CertificateIssuer\Certificate\TemplateLayout;
 use CertificateIssuer\Mail\EmailTemplateRenderer;
 use CertificateIssuer\Security\PasswordPolicy;
 use CertificateIssuer\Support\Env;
+use Endroid\QrCode\Color\Color;
+use Endroid\QrCode\Encoding\Encoding;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\QrCode;
+use Endroid\QrCode\RoundBlockSizeMode;
+use Endroid\QrCode\Writer\PngWriter;
 use PHPMailer\PHPMailer\PHPMailer;
 use RobThree\Auth\TwoFactorAuth;
 
@@ -665,11 +671,35 @@ function app_mfa_start_enrollment(string $userId): array
         return $user;
     });
 
+    $uri = app_mfa_service()->getQRText(app_mfa_label($user), $secret);
     return [
         'secret' => $secret,
-        'uri' => app_mfa_service()->getQRText(app_mfa_label($user), $secret),
+        'uri' => $uri,
+        'qrDataUri' => app_mfa_qr_data_uri($uri),
         'user' => $user,
     ];
+}
+
+function app_mfa_qr_data_uri(string $uri): string
+{
+    if (!class_exists(QrCode::class) || !extension_loaded('gd')) {
+        return '';
+    }
+
+    try {
+        $qrCode = QrCode::create($uri)
+            ->setEncoding(new Encoding('UTF-8'))
+            ->setErrorCorrectionLevel(ErrorCorrectionLevel::Medium)
+            ->setSize(260)
+            ->setMargin(12)
+            ->setRoundBlockSizeMode(RoundBlockSizeMode::Margin)
+            ->setForegroundColor(new Color(15, 23, 42))
+            ->setBackgroundColor(new Color(255, 255, 255));
+
+        return (new PngWriter())->write($qrCode)->getDataUri();
+    } catch (Throwable) {
+        return '';
+    }
 }
 
 function app_mfa_confirm_enrollment(string $userId, string $code): array

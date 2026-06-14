@@ -953,10 +953,38 @@ textarea.short-textarea {
 
 .mfa-setup-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr);
-    gap: 14px;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 18px;
     margin: 18px 0;
-    align-items: end;
+    align-items: start;
+}
+
+.mfa-qr-panel,
+.mfa-manual-panel {
+    display: grid;
+    gap: 10px;
+}
+
+.mfa-qr {
+    width: 220px;
+    height: 220px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 10px;
+}
+
+.mfa-qr-fallback {
+    display: grid;
+    place-items: center;
+    width: 220px;
+    height: 220px;
+    border: 1px dashed #bcc9d8;
+    border-radius: 8px;
+    color: var(--muted);
+    background: #f8fbff;
+    font-size: 13px;
+    font-weight: 800;
 }
 
 .secret-box {

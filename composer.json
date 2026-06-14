@@ -5,11 +5,13 @@
   "license": "MIT",
   "require": {
     "php": "^8.3",
+    "ext-gd": "*",
     "ext-intl": "*",
     "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-pdo_mysql": "*",
     "ext-sodium": "*",
+    "endroid/qr-code": "^5.1",
     "mpdf/mpdf": "^8.2",
     "phpmailer/phpmailer": "^6.9",
     "ramsey/uuid": "^4.7",

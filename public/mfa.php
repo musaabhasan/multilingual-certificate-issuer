@@ -144,11 +144,17 @@ function e(string $value): string
             <p>Add this account to an authenticator app, then enter the current 6-digit code to confirm enrollment.</p>
 
             <div class="mfa-setup-grid">
-                <div>
+                <div class="mfa-qr-panel">
+                    <?php if ((string) ($enrollment['qrDataUri'] ?? '') !== ''): ?>
+                        <img class="mfa-qr" src="<?= e((string) $enrollment['qrDataUri']) ?>" alt="Authenticator setup QR code">
+                    <?php else: ?>
+                        <div class="mfa-qr-fallback">QR code unavailable</div>
+                    <?php endif; ?>
+                    <span class="metric-label">Scan with an authenticator app</span>
+                </div>
+                <div class="mfa-manual-panel">
                     <span class="metric-label">Manual setup key</span>
                     <code class="secret-box"><?= e((string) $enrollment['secret']) ?></code>
-                </div>
-                <div>
                     <span class="metric-label">Authenticator URI</span>
                     <a class="button" href="<?= e((string) $enrollment['uri']) ?>">Open setup link</a>
                 </div>
