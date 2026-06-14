@@ -464,6 +464,181 @@ code {
     align-items: end;
 }
 
+.campaign-wizard {
+    display: grid;
+    gap: 18px;
+}
+
+.wizard-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wizard-steps button {
+    width: 100%;
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+    justify-items: start;
+    padding: 9px 10px;
+    text-align: left;
+}
+
+.wizard-steps span {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: #475467;
+    font-weight: 800;
+}
+
+.wizard-steps li.active button {
+    border-color: var(--teal);
+    background: #eefaf8;
+}
+
+.wizard-steps li.active span,
+.wizard-steps li.done span {
+    background: var(--teal);
+    color: #ffffff;
+}
+
+.wizard-step {
+    display: grid;
+    gap: 16px;
+}
+
+.wizard-step[hidden] {
+    display: none;
+}
+
+.wizard-step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 14px;
+    border-bottom: 1px solid #eeeeee;
+    padding-bottom: 14px;
+}
+
+.wizard-step-header h3 {
+    margin: 0;
+}
+
+.wizard-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.75fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.wizard-preview-panel {
+    display: grid;
+    gap: 10px;
+}
+
+.wizard-certificate-preview {
+    position: relative;
+    min-height: 260px;
+    display: grid;
+    place-items: center;
+    gap: 8px;
+    border: 1px solid #d8d8d8;
+    border-radius: 2px;
+    padding: 24px;
+    overflow: hidden;
+    text-align: center;
+    background:
+        linear-gradient(90deg, rgba(0, 150, 136, 0.08) 1px, transparent 1px),
+        linear-gradient(rgba(0, 150, 136, 0.08) 1px, transparent 1px),
+        #ffffff;
+    background-position: 0 0, 0 0, center;
+    background-size: 24px 24px, 24px 24px, contain;
+    background-repeat: repeat, repeat, no-repeat;
+}
+
+.wizard-certificate-preview.has-background {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.72)),
+        var(--wizard-preview-background, none);
+    background-position: center, center;
+    background-repeat: no-repeat, no-repeat;
+    background-size: 100% 100%, contain;
+}
+
+.wizard-certificate-preview[data-background-fit="stretch"] {
+    background-size: 100% 100%, 100% 100%;
+}
+
+.wizard-certificate-preview[data-background-fit="cover"] {
+    background-size: 100% 100%, cover;
+}
+
+.wizard-certificate-preview[data-background-fit="contain"] {
+    background-size: 100% 100%, contain;
+}
+
+.wizard-certificate-preview span,
+.wizard-certificate-preview em,
+.wizard-certificate-preview small {
+    position: relative;
+    z-index: 1;
+    font-style: normal;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.wizard-certificate-preview strong {
+    position: relative;
+    z-index: 1;
+    color: var(--ink);
+    font-size: 28px;
+}
+
+.wizard-review-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.wizard-review-grid div {
+    display: grid;
+    gap: 4px;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+    padding: 10px 11px;
+    background: #fafafa;
+}
+
+.wizard-review-grid dt {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.wizard-review-grid dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.wizard-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #eeeeee;
+    padding-top: 14px;
+}
+
 .wide-field {
     grid-column: span 2;
 }
@@ -1659,6 +1834,9 @@ textarea.short-textarea {
     .workspace,
     .designer-layout,
     .form-grid,
+    .wizard-steps,
+    .wizard-split,
+    .wizard-review-grid,
     .diagnostics-summary,
     .campaign-grid,
     .campaign-summary-strip,
@@ -1686,6 +1864,12 @@ textarea.short-textarea {
 
     .campaign-header-actions {
         justify-content: flex-start;
+    }
+
+    .wizard-step-header,
+    .wizard-actions {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .template-upload-summary {

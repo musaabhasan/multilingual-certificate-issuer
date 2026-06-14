@@ -24,6 +24,10 @@ const setCampaignStartNow = document.querySelector("#setCampaignStartNow");
 const clearCampaignEnd = document.querySelector("#clearCampaignEnd");
 const campaignEmailSubject = document.querySelector("#campaignEmailSubject");
 const campaignEmailBody = document.querySelector("#campaignEmailBody");
+const wizardBack = document.querySelector("#wizardBack");
+const wizardNext = document.querySelector("#wizardNext");
+const wizardCreate = document.querySelector("#wizardCreate");
+const wizardStepOrder = ["csv", "design", "sending", "review"];
 
 const requiredLabels = ["unique_identifier", "email", "name_en"];
 const labelRoles = {
@@ -46,6 +50,7 @@ const recipientFilters = new Map();
 const expandedCampaigns = new Set();
 const csvEditors = new Set();
 let activeEmailSurface = null;
+let currentWizardStep = "csv";
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -88,6 +93,164 @@ function renderMetrics() {
   document.querySelector("#activeMetric").textContent = String(summary.activeCampaigns);
   document.querySelector("#recipientMetric").textContent = String(summary.totalRecipients);
   document.querySelector("#templateMetric").textContent = String(summary.templates);
+}
+
+function renderWizard() {
+  const activeIndex = wizardStepOrder.indexOf(currentWizardStep);
+  document.querySelectorAll("[data-wizard-step]").forEach((section) => {
+    section.hidden = section.dataset.wizardStep !== currentWizardStep;
+    section.classList.toggle("active", section.dataset.wizardStep === currentWizardStep);
+  });
+
+  document.querySelectorAll("[data-wizard-step-indicator]").forEach((item) => {
+    const step = item.dataset.wizardStepIndicator;
+    const stepIndex = wizardStepOrder.indexOf(step);
+    item.classList.toggle("active", step === currentWizardStep);
+    item.classList.toggle("done", stepIndex >= 0 && stepIndex < activeIndex);
+  });
+
+  wizardBack.disabled = activeIndex <= 0;
+  wizardNext.hidden = currentWizardStep === "review";
+  wizardCreate.hidden = currentWizardStep !== "review";
+  renderWizardTemplatePreview();
+  renderWizardReviewSummary();
+}
+
+function goToWizardStep(step) {
+  if (!wizardStepOrder.includes(step)) return;
+  const targetIndex = wizardStepOrder.indexOf(step);
+  const currentIndex = wizardStepOrder.indexOf(currentWizardStep);
+
+  if (targetIndex > currentIndex) {
+    for (let index = currentIndex; index < targetIndex; index += 1) {
+      validateWizardStep(wizardStepOrder[index]);
+    }
+  }
+
+  currentWizardStep = step;
+  renderWizard();
+}
+
+function goToNextWizardStep() {
+  const currentIndex = wizardStepOrder.indexOf(currentWizardStep);
+  validateWizardStep(currentWizardStep);
+  currentWizardStep = wizardStepOrder[Math.min(currentIndex + 1, wizardStepOrder.length - 1)];
+  renderWizard();
+}
+
+function goToPreviousWizardStep() {
+  const currentIndex = wizardStepOrder.indexOf(currentWizardStep);
+  currentWizardStep = wizardStepOrder[Math.max(currentIndex - 1, 0)];
+  renderWizard();
+}
+
+function validateWizardStep(step) {
+  if (step === "csv") {
+    const name = document.querySelector("#campaignName").value.trim();
+    if (!name) {
+      throw new Error("Enter a campaign name.");
+    }
+
+    if (!lastCampaignImport || lastCampaignImport.records.length === 0) {
+      throw new Error("Upload a recipient CSV before continuing.");
+    }
+
+    const missing = missingLabels(lastCampaignImport.headers);
+    if (missing.length > 0) {
+      throw new Error(`CSV is missing required labels: ${missing.join(", ")}.`);
+    }
+  }
+
+  if (step === "design") {
+    if (campaignTemplateMode.value === "upload" && !lastCampaignTemplateUpload) {
+      throw new Error("Upload the certificate template image before continuing.");
+    }
+
+    if (campaignTemplateMode.value === "saved" && !campaignTemplate.value) {
+      throw new Error("Select a saved template before continuing.");
+    }
+  }
+
+  if (step === "sending") {
+    const randomDelayUnit = store.normalizeDelayUnit(document.querySelector("#campaignRandomUnit").value);
+    const randomDelayMinSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMin").value, randomDelayUnit);
+    const randomDelayMaxSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMax").value, randomDelayUnit);
+    validateScheduleValues(
+      toIsoDateTime(document.querySelector("#campaignStart").value),
+      toIsoDateTime(document.querySelector("#campaignEnd").value),
+      randomDelayMinSeconds,
+      randomDelayMaxSeconds
+    );
+
+    if (!campaignEmailSubject.value.trim()) {
+      throw new Error("Enter an email subject.");
+    }
+  }
+}
+
+function renderWizardTemplatePreview() {
+  const preview = document.querySelector("#wizardTemplatePreview");
+  const note = document.querySelector("#wizardTemplatePreviewNote");
+  if (!preview || !note) return;
+
+  let background = "";
+  let name = "No template selected";
+  let fit = "contain";
+
+  if (campaignTemplateMode.value === "upload") {
+    background = lastCampaignTemplateUpload?.path || "";
+    name = lastCampaignTemplateUpload?.originalName || "Upload a template image";
+    fit = campaignTemplateFit.value || "stretch";
+  } else {
+    const template = store.findTemplate(campaignTemplate.value);
+    background = template?.layout?.background || "";
+    name = template?.name || "Select a saved template";
+    fit = template?.layout?.backgroundFit || "contain";
+  }
+
+  preview.style.setProperty("--wizard-preview-background", background ? `url("${browserAssetUrl(background)}")` : "none");
+  preview.dataset.backgroundFit = normalizeBackgroundFit(fit);
+  preview.classList.toggle("has-background", Boolean(background));
+  note.textContent = background
+    ? `${name} is selected. Recipient name, program, issue date, and QR placeholders are shown as a placement preview.`
+    : "Template preview updates after you select or upload a certificate design.";
+}
+
+function renderWizardReviewSummary() {
+  const summary = document.querySelector("#wizardReviewSummary");
+  if (!summary) return;
+
+  syncEmailEditors(campaignForm);
+  const randomDelayUnit = store.normalizeDelayUnit(document.querySelector("#campaignRandomUnit").value);
+  const randomDelayMinSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMin").value, randomDelayUnit);
+  const randomDelayMaxSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMax").value, randomDelayUnit);
+  const previewCampaign = {
+    recipients: lastCampaignImport?.records.length || 0,
+    failed: 0,
+    windowStartAt: document.querySelector("#campaignStart").value,
+    windowEndAt: document.querySelector("#campaignEnd").value,
+    randomDelayUnit,
+    randomDelayMinSeconds,
+    randomDelayMaxSeconds,
+    throttleSeconds: randomDelayMinSeconds || 60
+  };
+  const plan = store.deliveryPlan(previewCampaign);
+  const templateName = campaignTemplateMode.value === "upload"
+    ? (campaignTemplateName.value.trim() || lastCampaignTemplateUpload?.originalName || "Campaign upload")
+    : (store.findTemplate(campaignTemplate.value)?.name || "Saved template");
+
+  summary.innerHTML = `
+    <div><dt>Campaign</dt><dd>${escapeHtml(document.querySelector("#campaignName").value.trim() || "Untitled campaign")}</dd></div>
+    <div><dt>Recipients</dt><dd>${Number(lastCampaignImport?.records.length || 0)} from ${escapeHtml(lastCampaignImport?.fileName || "No CSV")}</dd></div>
+    <div><dt>Labels</dt><dd>${escapeHtml((lastCampaignImport?.headers || []).join(", ") || "No labels")}</dd></div>
+    <div><dt>Template</dt><dd>${escapeHtml(templateName)}</dd></div>
+    <div><dt>Start</dt><dd>${escapeHtml(document.querySelector("#campaignStart").value || "When started")}</dd></div>
+    <div><dt>End</dt><dd>${escapeHtml(document.querySelector("#campaignEnd").value || "Until complete")}</dd></div>
+    <div><dt>Random delay</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
+    <div><dt>Estimated run</dt><dd>${store.formatDuration(plan.estimatedDurationSeconds || plan.calculatedSpacingSeconds || 0)}</dd></div>
+    <div><dt>Subject</dt><dd>${escapeHtml(campaignEmailSubject.value.trim() || "Your certificate is ready")}</dd></div>
+    <div><dt>Tracking</dt><dd>Campaign lanes and Queue monitor will show pending, sent, failed, skipped, and completion status.</dd></div>
+  `;
 }
 
 function renderCampaigns() {
@@ -281,6 +444,25 @@ function renderCampaigns() {
 campaignForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   syncEmailEditors(campaignForm);
+  try {
+    wizardStepOrder.forEach(validateWizardStep);
+  } catch (error) {
+    setCampaignLaneStatus(error.message, "warning");
+    const failingStep = wizardStepOrder.find((step) => {
+      try {
+        validateWizardStep(step);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    if (failingStep) {
+      currentWizardStep = failingStep;
+      renderWizard();
+    }
+    return;
+  }
+
   const name = document.querySelector("#campaignName").value.trim();
   if (!name) return;
 
@@ -328,6 +510,7 @@ campaignForm.addEventListener("submit", async (event) => {
     campaignTemplateFile.value = "";
     expandedCampaigns.clear();
     expandedCampaigns.add(created.id);
+    currentWizardStep = "csv";
     resetCampaignCsvPreview();
     setTemplateUploadStatus("No template image selected", "locked");
     campaignTemplatePreview.textContent = "Upload a PNG, JPG, or WebP certificate background. Recipient name, program, date, and QR fields will be added automatically.";
@@ -337,6 +520,31 @@ campaignForm.addEventListener("submit", async (event) => {
   } catch (error) {
     setCampaignLaneStatus(error.message, "warning");
   }
+});
+
+document.querySelectorAll("[data-wizard-step-target]").forEach((button) => {
+  button.addEventListener("click", () => {
+    try {
+      goToWizardStep(button.dataset.wizardStepTarget);
+      setCampaignLaneStatus("Campaign wizard updated", "ready");
+    } catch (error) {
+      setCampaignLaneStatus(error.message, "warning");
+    }
+  });
+});
+
+wizardNext.addEventListener("click", () => {
+  try {
+    goToNextWizardStep();
+    setCampaignLaneStatus("Campaign wizard updated", "ready");
+  } catch (error) {
+    setCampaignLaneStatus(error.message, "warning");
+  }
+});
+
+wizardBack.addEventListener("click", () => {
+  goToPreviousWizardStep();
+  setCampaignLaneStatus("Campaign wizard updated", "ready");
 });
 
 campaignList.addEventListener("click", async (event) => {
@@ -514,7 +722,19 @@ campaignCsvFile.addEventListener("change", async () => {
 
 campaignTemplateMode.addEventListener("change", () => {
   renderTemplateMode();
+  renderWizardTemplatePreview();
+  renderWizardReviewSummary();
   renderPlanPreview();
+});
+
+campaignTemplate.addEventListener("change", () => {
+  renderWizardTemplatePreview();
+  renderWizardReviewSummary();
+});
+
+campaignTemplateFit.addEventListener("change", () => {
+  renderWizardTemplatePreview();
+  renderWizardReviewSummary();
 });
 
 campaignTemplateFile.addEventListener("change", async () => {
@@ -527,10 +747,13 @@ campaignTemplateFile.addEventListener("change", async () => {
     lastCampaignTemplateUpload = await uploadTemplateImage(file);
     setTemplateUploadStatus("Template image ready", "ready");
     campaignTemplatePreview.textContent = file.name;
+    renderWizardTemplatePreview();
+    renderWizardReviewSummary();
   } catch (error) {
     lastCampaignTemplateUpload = null;
     setTemplateUploadStatus("Template upload failed", "failed");
     campaignTemplatePreview.textContent = error.message;
+    renderWizardTemplatePreview();
   }
 });
 
@@ -593,6 +816,7 @@ document.addEventListener("input", (event) => {
   const surface = event.target.closest?.(".rich-editor-surface");
   if (surface) {
     syncRichSurface(surface);
+    renderWizardReviewSummary();
     return;
   }
 
@@ -603,6 +827,7 @@ document.addEventListener("input", (event) => {
     if (surfaceElement) {
       surfaceElement.innerHTML = source.value;
     }
+    renderWizardReviewSummary();
   }
 });
 
@@ -613,8 +838,11 @@ document.addEventListener("focusin", (event) => {
   }
 });
 
-["campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax"].forEach((id) => {
-  document.querySelector(`#${id}`).addEventListener("input", renderPlanPreview);
+["campaignName", "campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax", "campaignEmailSubject", "campaignSmtp"].forEach((id) => {
+  document.querySelector(`#${id}`).addEventListener("input", () => {
+    renderPlanPreview();
+    renderWizardReviewSummary();
+  });
 });
 
 [campaignSearch, campaignStatusFilter, campaignSort].forEach((control) => {
@@ -624,11 +852,13 @@ document.addEventListener("focusin", (event) => {
 setCampaignStartNow.addEventListener("click", () => {
   document.querySelector("#campaignStart").value = toDateTimeInput(new Date());
   renderPlanPreview();
+  renderWizardReviewSummary();
 });
 
 clearCampaignEnd.addEventListener("click", () => {
   document.querySelector("#campaignEnd").value = "";
   renderPlanPreview();
+  renderWizardReviewSummary();
 });
 
 document.querySelectorAll("[data-delay-preset-unit]").forEach((button) => {
@@ -637,6 +867,7 @@ document.querySelectorAll("[data-delay-preset-unit]").forEach((button) => {
     document.querySelector("#campaignRandomMin").value = button.dataset.delayPresetMin;
     document.querySelector("#campaignRandomMax").value = button.dataset.delayPresetMax;
     renderPlanPreview();
+    renderWizardReviewSummary();
   });
 });
 
@@ -653,6 +884,7 @@ function render() {
   renderCampaigns();
   enhanceEmailEditors(document);
   renderPlanPreview();
+  renderWizard();
 }
 
 async function initializeCampaigns() {
@@ -1317,6 +1549,8 @@ async function importCampaignCsv(file) {
   } else {
     setCsvStatus("CSV ready for this campaign", "status ready");
   }
+
+  renderWizardReviewSummary();
 }
 
 async function parseCampaignCsvFile(file) {
