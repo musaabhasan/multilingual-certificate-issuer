@@ -49,6 +49,7 @@ let lastCampaignTemplateUpload = null;
 const recipientFilters = new Map();
 const expandedCampaigns = new Set();
 const csvEditors = new Set();
+const campaignTabs = new Map();
 let activeEmailSurface = null;
 let currentWizardStep = "csv";
 
@@ -60,6 +61,9 @@ function setCampaignLaneStatus(text, state = "ready") {
 function renderTemplateOptions() {
   const selected = campaignTemplate.value;
   const templates = reusableTemplates();
+  if (templates.length === 0 && campaignTemplateMode.value === "saved") {
+    campaignTemplateMode.value = "upload";
+  }
   campaignTemplate.innerHTML = templateOptionsMarkup(selected);
 
   if (selected && templates.some((template) => template.id === selected)) {
@@ -253,6 +257,15 @@ function renderWizardReviewSummary() {
   `;
 }
 
+function campaignTabButton(campaignId, activeTab, tab, label) {
+  const active = activeTab === tab;
+  return `<button type="button" data-campaign-tab="${escapeHtml(tab)}" data-id="${escapeHtml(campaignId)}" aria-selected="${active ? "true" : "false"}">${escapeHtml(label)}</button>`;
+}
+
+function campaignSectionState(activeTab, tab) {
+  return activeTab === tab ? "" : "hidden";
+}
+
 function renderCampaigns() {
   const allCampaigns = store.campaigns();
   const campaigns = filteredCampaigns(allCampaigns);
@@ -289,6 +302,7 @@ function renderCampaigns() {
     const randomMaxAmount = store.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
     const expanded = expandedCampaigns.has(campaign.id);
     const csvEditorOpen = csvEditors.has(campaign.id);
+    const activeTab = campaignTabs.get(campaign.id) || "overview";
     const primaryAction = campaign.status === "running" ? "paused" : "running";
     const primaryActionLabel = campaign.status === "running" ? "Stop sending" : "Start";
 
@@ -315,125 +329,149 @@ function renderCampaigns() {
           <span>${escapeHtml(planLabel)}</span>
         </div>
         <div class="campaign-details" ${expanded ? "" : "hidden"}>
-        <dl class="detail-list compact-details">
-          <div><dt>CSV file</dt><dd>${escapeHtml(campaign.importFileName || "No CSV attached")}</dd></div>
-          <div><dt>Template source</dt><dd>${escapeHtml(templateSource)}</dd></div>
-          <div><dt>Template file</dt><dd>${escapeHtml(templateFile)}</dd></div>
-          <div><dt>Labels</dt><dd>${escapeHtml((campaign.labels || []).slice(0, 4).join(", ") || "None")}${(campaign.labels || []).length > 4 ? ` +${(campaign.labels || []).length - 4}` : ""}</dd></div>
-          <div><dt>Recipients</dt><dd>${Number(campaign.recipients || 0)}</dd></div>
-          <div><dt>Sent</dt><dd>${counts.sent}</dd></div>
-          <div><dt>Pending</dt><dd>${pending}</dd></div>
-          <div><dt>Failed</dt><dd>${counts.failed}</dd></div>
-          <div><dt>Skipped</dt><dd>${counts.skipped}</dd></div>
-          <div><dt>Send start</dt><dd>${escapeHtml(campaign.windowStartAt || "Not set")}</dd></div>
-          <div><dt>Send end</dt><dd>${escapeHtml(campaign.windowEndAt || "Until complete")}</dd></div>
-          <div><dt>Spacing</dt><dd>${store.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
-          <div><dt>Random buffer</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
-        </dl>
-        <span class="${planClass}">${escapeHtml(planLabel)}</span>
-        <div class="campaign-assets">
-          <h4>Schedule and speed</h4>
-          <div class="asset-grid">
-            <label>Send start
-              <input data-schedule-start="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowStartAt || campaign.scheduledAt))}">
-            </label>
-            <label>Send end
-              <input data-schedule-end="${escapeHtml(campaign.id)}" type="datetime-local" placeholder="Until complete" value="${escapeAttribute(toDateTimeInput(campaign.windowEndAt))}">
-            </label>
-            <label>Delay unit
-              <select data-schedule-unit="${escapeHtml(campaign.id)}">${delayUnitOptionsMarkup(randomUnit)}</select>
-            </label>
-            <label>Random delay min
-              <input data-schedule-min="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMinAmount)}">
-            </label>
-            <label>Random delay max
-              <input data-schedule-max="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMaxAmount)}">
-            </label>
-            <button type="button" data-action="save-schedule" data-id="${escapeHtml(campaign.id)}">Save schedule</button>
+          <div class="campaign-section-tabs" role="tablist" aria-label="Campaign detail sections">
+            ${campaignTabButton(campaign.id, activeTab, "overview", "Overview")}
+            ${campaignTabButton(campaign.id, activeTab, "recipients", "Recipients")}
+            ${campaignTabButton(campaign.id, activeTab, "assets", "Assets")}
+            ${campaignTabButton(campaign.id, activeTab, "message", "Message")}
+            ${campaignTabButton(campaign.id, activeTab, "activity", "Activity")}
           </div>
-        </div>
-        <div class="table-scroll recipient-preview">
-          <div class="recipient-toolbar">
-            <label>Find recipient
-              <input data-recipient-filter-input="${escapeHtml(campaign.id)}" type="search" placeholder="Name, email, or certificate id" value="${escapeAttribute(recipientFilter)}">
-            </label>
-            <button type="button" data-action="filter-recipients" data-id="${escapeHtml(campaign.id)}">Filter</button>
-            <button type="button" data-action="clear-recipient-filter" data-id="${escapeHtml(campaign.id)}">Clear</button>
-            <span>${recipientRows.length} of ${matchingRecipients.length} shown</span>
-          </div>
-          <table class="data-table compact-preview">
-            <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${recipientRows.map((recipient) => `
-                <tr>
-                  <td>${Number(recipient.sequence || 0)}</td>
-                  <td>${escapeHtml(recipient.displayName)}</td>
-                  <td>${escapeHtml(recipient.email || "-")}</td>
-                  <td><span class="${store.recipientStatusClass(recipient.status)}">${store.recipientStatusLabel(recipient.status)}</span></td>
-                  <td>${recipientActionsMarkup(campaign.id, recipient)}</td>
-                </tr>
-              `).join("") || "<tr><td colspan=\"5\">No recipient CSV attached yet.</td></tr>"}
-            </tbody>
-          </table>
-        </div>
-        ${hiddenRecipientCount > 0 ? `<p class="subtle-note">Showing first ${recipientRows.length} matching recipients. Use the recipient filter to narrow larger lists.</p>` : ""}
-        <div class="campaign-assets">
-          <h4>Campaign assets</h4>
-          <div class="asset-grid">
-            <label>Replace campaign CSV
-              <input data-csv-upload="${escapeHtml(campaign.id)}" type="file" accept=".csv,text/csv">
-            </label>
-            <button type="button" data-action="toggle-csv-editor" data-id="${escapeHtml(campaign.id)}">${csvEditorOpen ? "Close CSV editor" : "Edit CSV data"}</button>
-            <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}" ${allRecipients.length === 0 ? "disabled" : ""}>Download CSV</button>
-            <label>Saved template
-              <select data-template-select="${escapeHtml(campaign.id)}">${templateOptionsMarkup(campaign.templateId)}</select>
-            </label>
-            <button type="button" data-action="save-template" data-id="${escapeHtml(campaign.id)}">Use selected template</button>
-            ${campaign.templateId && !campaign.campaignTemplateLayout ? `<a class="button" href="/designer.html?template=${encodeURIComponent(campaign.templateId)}">Edit template</a>` : ""}
-            <label>Upload campaign template image
-              <input data-template-upload="${escapeHtml(campaign.id)}" type="file" accept="image/png,image/jpeg,image/webp">
-            </label>
-          </div>
-        </div>
-        <div class="csv-editor-panel" ${csvEditorOpen ? "" : "hidden"}>
-          <div class="panel-header">
-            <div>
-              <h4>CSV data editor</h4>
-              <p>Edit labels or recipient rows, then save to rebuild this campaign's recipient queue.</p>
+
+          <section class="campaign-section" ${campaignSectionState(activeTab, "overview")}>
+            <dl class="detail-list compact-details">
+              <div><dt>CSV file</dt><dd>${escapeHtml(campaign.importFileName || "No CSV attached")}</dd></div>
+              <div><dt>Template source</dt><dd>${escapeHtml(templateSource)}</dd></div>
+              <div><dt>Template file</dt><dd>${escapeHtml(templateFile)}</dd></div>
+              <div><dt>Labels</dt><dd>${escapeHtml((campaign.labels || []).slice(0, 4).join(", ") || "None")}${(campaign.labels || []).length > 4 ? ` +${(campaign.labels || []).length - 4}` : ""}</dd></div>
+              <div><dt>Recipients</dt><dd>${Number(campaign.recipients || 0)}</dd></div>
+              <div><dt>Sent</dt><dd>${counts.sent}</dd></div>
+              <div><dt>Pending</dt><dd>${pending}</dd></div>
+              <div><dt>Failed</dt><dd>${counts.failed}</dd></div>
+              <div><dt>Skipped</dt><dd>${counts.skipped}</dd></div>
+              <div><dt>Send start</dt><dd>${escapeHtml(campaign.windowStartAt || "Not set")}</dd></div>
+              <div><dt>Send end</dt><dd>${escapeHtml(campaign.windowEndAt || "Until complete")}</dd></div>
+              <div><dt>Spacing</dt><dd>${store.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
+              <div><dt>Random buffer</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
+            </dl>
+            <div class="campaign-command-bar">
+              <span class="${planClass}">${escapeHtml(planLabel)}</span>
+              <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
+              <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
+              <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+              <a class="button" href="/queue.html">Queue details</a>
             </div>
-            <span class="status ${allRecipients.length > 0 ? "ready" : "locked"}">${allRecipients.length} rows</span>
-          </div>
-          <textarea data-csv-editor="${escapeHtml(campaign.id)}" class="csv-textarea" spellcheck="false">${escapeHtml(campaignToCsv(campaign))}</textarea>
-          <div class="action-row">
-            <button type="button" data-action="save-csv-editor" data-id="${escapeHtml(campaign.id)}">Save CSV changes</button>
-            <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}">Download CSV</button>
-          </div>
-          <p class="subtle-note">Saving edited CSV data replaces the campaign recipient list and resets those recipients to queued.</p>
-        </div>
-        <div class="email-editor">
-          <label>Email subject
-            <input data-email-subject="${escapeHtml(campaign.id)}" type="text" value="${escapeAttribute(campaign.emailSubject)}">
-          </label>
-          <label>Email body
-            <textarea data-email-body="${escapeHtml(campaign.id)}" class="short-textarea email-body-input">${escapeHtml(campaign.emailBodyHtml)}</textarea>
-          </label>
-          <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
-          <button type="button" data-action="save-email" data-id="${escapeHtml(campaign.id)}">Save email</button>
-        </div>
-        <div class="event-list">
-          ${(campaign.deliveryEvents || []).slice(-3).reverse().map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No campaign events yet.</span></div>"}
-        </div>
-        <div class="action-row">
-          <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
-          <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
-          <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
-          <button type="button" data-action="restart-campaign" data-id="${escapeHtml(campaign.id)}">Restart campaign</button>
-          <button type="button" data-action="reuse-campaign" data-id="${escapeHtml(campaign.id)}">Reuse with recipients</button>
-          <button type="button" data-action="duplicate" data-id="${escapeHtml(campaign.id)}">Duplicate setup</button>
-          <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
-          <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete</button>
-          <a class="button" href="/queue.html">Queue details</a>
-        </div>
+            <div class="campaign-assets">
+              <h4>Schedule and speed</h4>
+              <div class="asset-grid">
+                <label>Send start
+                  <input data-schedule-start="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowStartAt || campaign.scheduledAt))}">
+                </label>
+                <label>Send end
+                  <input data-schedule-end="${escapeHtml(campaign.id)}" type="datetime-local" placeholder="Until complete" value="${escapeAttribute(toDateTimeInput(campaign.windowEndAt))}">
+                </label>
+                <label>Delay unit
+                  <select data-schedule-unit="${escapeHtml(campaign.id)}">${delayUnitOptionsMarkup(randomUnit)}</select>
+                </label>
+                <label>Random delay min
+                  <input data-schedule-min="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMinAmount)}">
+                </label>
+                <label>Random delay max
+                  <input data-schedule-max="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMaxAmount)}">
+                </label>
+                <button type="button" data-action="save-schedule" data-id="${escapeHtml(campaign.id)}">Save schedule</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="campaign-section" ${campaignSectionState(activeTab, "recipients")}>
+            <div class="table-scroll recipient-preview">
+              <div class="recipient-toolbar">
+                <label>Find recipient
+                  <input data-recipient-filter-input="${escapeHtml(campaign.id)}" type="search" placeholder="Name, email, or certificate id" value="${escapeAttribute(recipientFilter)}">
+                </label>
+                <button type="button" data-action="filter-recipients" data-id="${escapeHtml(campaign.id)}">Filter</button>
+                <button type="button" data-action="clear-recipient-filter" data-id="${escapeHtml(campaign.id)}">Clear</button>
+                <span>${recipientRows.length} of ${matchingRecipients.length} shown</span>
+              </div>
+              <table class="data-table compact-preview">
+                <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  ${recipientRows.map((recipient) => `
+                    <tr>
+                      <td>${Number(recipient.sequence || 0)}</td>
+                      <td>${escapeHtml(recipient.displayName)}</td>
+                      <td>${escapeHtml(recipient.email || "-")}</td>
+                      <td><span class="${store.recipientStatusClass(recipient.status)}">${store.recipientStatusLabel(recipient.status)}</span></td>
+                      <td>${recipientActionsMarkup(campaign.id, recipient)}</td>
+                    </tr>
+                  `).join("") || "<tr><td colspan=\"5\">No recipient CSV attached yet.</td></tr>"}
+                </tbody>
+              </table>
+            </div>
+            ${hiddenRecipientCount > 0 ? `<p class="subtle-note">Showing first ${recipientRows.length} matching recipients. Use the recipient filter to narrow larger lists.</p>` : ""}
+            <div class="csv-editor-panel" ${csvEditorOpen ? "" : "hidden"}>
+              <div class="panel-header">
+                <div>
+                  <h4>CSV data editor</h4>
+                  <p>Edit labels or recipient rows, then save to rebuild this campaign's recipient queue.</p>
+                </div>
+                <span class="status ${allRecipients.length > 0 ? "ready" : "locked"}">${allRecipients.length} rows</span>
+              </div>
+              <textarea data-csv-editor="${escapeHtml(campaign.id)}" class="csv-textarea" spellcheck="false">${escapeHtml(campaignToCsv(campaign))}</textarea>
+              <div class="action-row">
+                <button type="button" data-action="save-csv-editor" data-id="${escapeHtml(campaign.id)}">Save CSV changes</button>
+                <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}">Download CSV</button>
+              </div>
+              <p class="subtle-note">Saving edited CSV data replaces the campaign recipient list and resets those recipients to queued.</p>
+            </div>
+          </section>
+
+          <section class="campaign-section" ${campaignSectionState(activeTab, "assets")}>
+            <div class="campaign-assets no-top-border">
+              <h4>CSV and template assets</h4>
+              <div class="asset-grid">
+                <label>Replace campaign CSV
+                  <input data-csv-upload="${escapeHtml(campaign.id)}" type="file" accept=".csv,text/csv">
+                </label>
+                <button type="button" data-action="toggle-csv-editor" data-id="${escapeHtml(campaign.id)}">${csvEditorOpen ? "Close CSV editor" : "Edit CSV data"}</button>
+                <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}" ${allRecipients.length === 0 ? "disabled" : ""}>Download CSV</button>
+                <label>Saved template
+                  <select data-template-select="${escapeHtml(campaign.id)}">${templateOptionsMarkup(campaign.templateId)}</select>
+                </label>
+                <button type="button" data-action="save-template" data-id="${escapeHtml(campaign.id)}">Use selected template</button>
+                ${campaign.templateId && !campaign.campaignTemplateLayout ? `<a class="button" href="/designer.html?template=${encodeURIComponent(campaign.templateId)}">Edit template</a>` : ""}
+                <label>Upload campaign template image
+                  <input data-template-upload="${escapeHtml(campaign.id)}" type="file" accept="image/png,image/jpeg,image/webp">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="campaign-section" ${campaignSectionState(activeTab, "message")}>
+            <div class="email-editor no-top-border">
+              <label>Email subject
+                <input data-email-subject="${escapeHtml(campaign.id)}" type="text" value="${escapeAttribute(campaign.emailSubject)}">
+              </label>
+              <label>Email body
+                <textarea data-email-body="${escapeHtml(campaign.id)}" class="short-textarea email-body-input">${escapeHtml(campaign.emailBodyHtml)}</textarea>
+              </label>
+              <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
+              <button type="button" data-action="save-email" data-id="${escapeHtml(campaign.id)}">Save email</button>
+            </div>
+          </section>
+
+          <section class="campaign-section" ${campaignSectionState(activeTab, "activity")}>
+            <div class="event-list">
+              ${(campaign.deliveryEvents || []).slice(-6).reverse().map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No campaign events yet.</span></div>"}
+            </div>
+            <div class="campaign-command-bar">
+              <button type="button" data-action="restart-campaign" data-id="${escapeHtml(campaign.id)}">Restart campaign</button>
+              <button type="button" data-action="reuse-campaign" data-id="${escapeHtml(campaign.id)}">Reuse with recipients</button>
+              <button type="button" data-action="duplicate" data-id="${escapeHtml(campaign.id)}">Duplicate setup</button>
+              <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
+              <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete</button>
+            </div>
+          </section>
         </div>
       </article>
     `;
@@ -548,6 +586,14 @@ wizardBack.addEventListener("click", () => {
 });
 
 campaignList.addEventListener("click", async (event) => {
+  const tabButton = event.target.closest("button[data-campaign-tab]");
+  if (tabButton) {
+    campaignTabs.set(tabButton.dataset.id, tabButton.dataset.campaignTab);
+    renderCampaigns();
+    setCampaignLaneStatus("Campaign section updated", "ready");
+    return;
+  }
+
   const recipientButton = event.target.closest("button[data-recipient-action]");
   if (recipientButton) {
     recipientButton.disabled = true;
@@ -650,6 +696,7 @@ campaignList.addEventListener("click", async (event) => {
       } else {
         expandedCampaigns.add(button.dataset.id);
         csvEditors.add(button.dataset.id);
+        campaignTabs.set(button.dataset.id, "recipients");
       }
       renderCampaigns();
       setCampaignLaneStatus("CSV editor view updated", "ready");

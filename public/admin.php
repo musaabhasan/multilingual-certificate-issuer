@@ -72,23 +72,23 @@ function e(string $value): string
                         </select>
                     </label>
                     <label>Profile name <input id="smtpProfileName" type="text"></label>
-                    <label>SMTP host <input id="smtpHost" type="text" autocomplete="off"></label>
-                    <label>SMTP port <input id="smtpPort" type="number" min="1" value="587"></label>
-                    <label>Encryption
+                    <label data-delivery-panel="smtp">SMTP host <input id="smtpHost" type="text" autocomplete="off"></label>
+                    <label data-delivery-panel="smtp">SMTP port <input id="smtpPort" type="number" min="1" value="587"></label>
+                    <label data-delivery-panel="smtp">Encryption
                         <select id="smtpEncryption">
                             <option value="tls">TLS</option>
                             <option value="ssl">SSL</option>
                         </select>
                     </label>
-                    <label>SMTP username <input id="smtpUsername" type="text" autocomplete="off"></label>
-                    <label>SMTP password <input id="smtpPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password"></label>
-                    <label>From address <input id="smtpFromAddress" type="email"></label>
-                    <label>From name <input id="smtpFromName" type="text"></label>
-                    <label>Graph tenant ID <input id="graphTenantId" type="text" autocomplete="off" placeholder="Tenant ID or domain"></label>
-                    <label>Graph client ID <input id="graphClientId" type="text" autocomplete="off"></label>
-                    <label>Graph client secret <input id="graphClientSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep current secret"></label>
-                    <label>Graph sender mailbox <input id="graphSender" type="email" autocomplete="off"></label>
-                    <p class="form-note full-field">Microsoft Graph mode uses an Entra app registration with Microsoft Graph Mail.Send application permission and admin consent. It sends through the configured sender mailbox and attaches certificate PDFs.</p>
+                    <label data-delivery-panel="smtp">SMTP username <input id="smtpUsername" type="text" autocomplete="off"></label>
+                    <label data-delivery-panel="smtp">SMTP password <input id="smtpPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password"></label>
+                    <label data-delivery-panel="smtp">From address <input id="smtpFromAddress" type="email"></label>
+                    <label data-delivery-panel="smtp">From name <input id="smtpFromName" type="text"></label>
+                    <label data-delivery-panel="graph">Graph tenant ID <input id="graphTenantId" type="text" autocomplete="off" placeholder="Tenant ID or domain"></label>
+                    <label data-delivery-panel="graph">Graph client ID <input id="graphClientId" type="text" autocomplete="off"></label>
+                    <label data-delivery-panel="graph">Graph client secret <input id="graphClientSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep current secret"></label>
+                    <label data-delivery-panel="graph">Graph sender mailbox <input id="graphSender" type="email" autocomplete="off"></label>
+                    <p class="form-note full-field" data-delivery-panel="graph">Microsoft Graph mode uses an Entra app registration with Microsoft Graph Mail.Send application permission and admin consent. It sends through the configured sender mailbox and attaches certificate PDFs.</p>
                     <button class="primary" type="submit">Save settings</button>
                 </form>
                 <div class="smtp-test-panel">

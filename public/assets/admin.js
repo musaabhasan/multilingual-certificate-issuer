@@ -38,6 +38,7 @@ async function loadSettings() {
   document.querySelector("#graphClientId").value = settings.smtp?.graphClientId || "";
   document.querySelector("#graphClientSecret").placeholder = settings.smtp?.hasGraphClientSecret ? "Secret saved; leave blank to keep it" : "Graph client secret";
   document.querySelector("#graphSender").value = settings.smtp?.graphSender || "";
+  renderDeliveryModeFields();
   if (!document.querySelector("#smtpTestRecipient").value && adminAuth.user?.email) {
     document.querySelector("#smtpTestRecipient").value = adminAuth.user.email;
   }
@@ -45,6 +46,13 @@ async function loadSettings() {
     document.querySelector("#smtpTestRecipientName").value = adminAuth.user.name;
   }
   setStatus(settingsStatus, deliveryModeLabel(settings.smtp?.deliveryMode), "ready");
+}
+
+function renderDeliveryModeFields() {
+  const mode = document.querySelector("#smtpDeliveryMode").value;
+  document.querySelectorAll("[data-delivery-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.deliveryPanel !== mode;
+  });
 }
 
 function currentSettingsPayload() {
@@ -300,6 +308,10 @@ smtpDiagnosticsButton.addEventListener("click", runSmtpDiagnostics);
 userForm.addEventListener("submit", createUser);
 passwordForm.addEventListener("submit", changePassword);
 refreshAudit.addEventListener("click", loadAudit);
+document.querySelector("#smtpDeliveryMode").addEventListener("change", () => {
+  renderDeliveryModeFields();
+  setStatus(settingsStatus, deliveryModeLabel(document.querySelector("#smtpDeliveryMode").value), "locked");
+});
 
 Promise.all([loadSettings(), loadUsers(), loadAudit()]).catch((error) => {
   setStatus(settingsStatus, error.message, "warning");

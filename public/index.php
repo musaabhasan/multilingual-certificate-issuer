@@ -68,6 +68,22 @@ app_require_auth();
     <section class="workspace">
         <article class="panel span-2">
             <div class="panel-header">
+                <h2>Operational workflow</h2>
+                <a href="/campaigns.html">Continue</a>
+            </div>
+            <div id="dashboardWorkflow" class="workflow-list"></div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <h2>Needs attention</h2>
+                <a href="/queue.html">Queue</a>
+            </div>
+            <div id="dashboardAttention" class="attention-list"></div>
+        </article>
+
+        <article class="panel span-2">
+            <div class="panel-header">
                 <div>
                     <h2>Active campaigns</h2>
                     <p>Separate template, import, schedule, and delivery state per campaign.</p>

@@ -860,6 +860,63 @@ code {
     padding-left: 18px;
 }
 
+.workflow-list,
+.attention-list {
+    display: grid;
+    gap: 8px;
+}
+
+.workflow-row,
+.attention-row {
+    display: grid;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+    padding: 9px 10px;
+    background: #fafafa;
+    color: var(--ink);
+}
+
+.workflow-row {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
+.workflow-row span {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #eef2f7;
+    color: #475467;
+    font-weight: 800;
+}
+
+.workflow-row.done span {
+    background: var(--teal);
+    color: #ffffff;
+}
+
+.workflow-row em {
+    color: var(--muted);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.attention-row {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+
+.attention-row strong,
+.workflow-row strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .stacked-controls {
     display: grid;
     gap: 10px;
@@ -1037,6 +1094,40 @@ code {
     display: none;
 }
 
+.campaign-section-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.campaign-section-tabs button {
+    min-height: 34px;
+    padding: 7px 11px;
+}
+
+.campaign-section-tabs button[aria-selected="true"] {
+    border-color: var(--teal);
+    background: #eefaf8;
+    color: #00695c;
+}
+
+.campaign-section {
+    display: grid;
+    gap: 12px;
+}
+
+.campaign-section[hidden] {
+    display: none;
+}
+
+.campaign-command-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
 .empty-state {
     grid-column: 1 / -1;
     border: 1px dashed #d8d8d8;
@@ -1131,6 +1222,13 @@ code {
     margin: 14px 0;
     border-top: 1px solid #e6edf5;
     padding-top: 14px;
+}
+
+.campaign-assets.no-top-border,
+.email-editor.no-top-border {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
 }
 
 .campaign-assets h4 {

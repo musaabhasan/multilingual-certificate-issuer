@@ -510,6 +510,7 @@ function loadSelectedTemplate(options = {}) {
   suppressTemplateDirty = false;
   templateDirty = false;
   setTemplateStatus("Template loaded", "status ready");
+  syncTemplateActionState();
 }
 
 function saveCurrentTemplate(options = {}) {
@@ -527,6 +528,7 @@ function saveCurrentTemplate(options = {}) {
   renderTemplateSelect(saved.id);
   templateDirty = false;
   setTemplateStatus(saveAsCopy ? "Template copy saved" : "Template saved", "status ready");
+  syncTemplateActionState();
 }
 
 function setTemplateStatus(text, className) {
@@ -538,10 +540,16 @@ function markTemplateDirty() {
   if (suppressTemplateDirty) return;
   templateDirty = true;
   setTemplateStatus(currentTemplateId ? "Unsaved changes" : "Unsaved draft", "status warning");
+  syncTemplateActionState();
 }
 
 function confirmDiscardTemplateChanges() {
   return !templateDirty || window.confirm("Discard unsaved template changes?");
+}
+
+function syncTemplateActionState() {
+  saveTemplate.disabled = Boolean(currentTemplateId) && !templateDirty;
+  saveTemplateCopy.disabled = !currentTemplateId && !templateDirty;
 }
 
 function reusableTemplates() {
@@ -572,6 +580,7 @@ function newBlankTemplate(options = {}) {
   addCsvTextItem({ label: "Arabic Recipient Name", source: "name_ar", direction: "rtl", align: "center", left: 170, top: 205, width: 190, height: 42, font: "bukra_book_slanted", fontSize: "24" });
   suppressTemplateDirty = false;
   exportJson();
+  syncTemplateActionState();
 }
 
 function nextTemplateCopyName(name) {
@@ -823,3 +832,4 @@ if (requestedTemplate) {
 } else {
   newBlankTemplate({ confirm: false });
 }
+syncTemplateActionState();
