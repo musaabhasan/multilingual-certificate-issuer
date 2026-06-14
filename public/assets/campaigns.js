@@ -668,6 +668,7 @@ campaignList.addEventListener("click", async (event) => {
 
     try {
       if (recipientButton.dataset.recipientAction === "preview") {
+        persistCampaignEmailFromEditors(recipientButton.dataset.id);
         await window.CertificateIssuerPreview.open(recipientButton.dataset.id, recipientButton.dataset.recipientId, setCampaignLaneStatus);
       } else {
         updateRecipientFromButton(recipientButton);
@@ -698,10 +699,12 @@ campaignList.addEventListener("click", async (event) => {
       renderCampaigns();
       setCampaignLaneStatus("Campaign view updated", "ready");
     } else if (button.dataset.action === "running") {
+      persistCampaignEmailFromEditors(button.dataset.id);
       await store.updateCampaignStatusAsync(button.dataset.id, "running");
       render();
       setCampaignLaneStatus("Campaign started. Queue worker will process due recipients.", "ready");
     } else if (button.dataset.action === "send-one") {
+      persistCampaignEmailFromEditors(button.dataset.id);
       await store.manualSendOneAsync(button.dataset.id);
       render();
       setCampaignLaneStatus("One due recipient processed", "ready");
@@ -794,14 +797,7 @@ campaignList.addEventListener("click", async (event) => {
       render();
       setCampaignLaneStatus("Campaign template updated", "ready");
     } else if (button.dataset.action === "save-email") {
-      syncEmailEditors(campaignList);
-      const subject = document.querySelector(`[data-email-subject="${cssEscape(button.dataset.id)}"]`)?.value.trim();
-      const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
-      store.updateCampaign(button.dataset.id, {
-        emailSubject: subject || "Your certificate is ready",
-        emailBodyHtml: body || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
-        attachPdf: true
-      });
+      persistCampaignEmailFromEditors(button.dataset.id, { force: true });
       render();
       setCampaignLaneStatus("Email content saved", "ready");
     } else {
@@ -1273,6 +1269,31 @@ function saveCampaignSchedule(campaignId) {
     randomDelayMinSeconds,
     randomDelayMaxSeconds,
     throttleSeconds: randomDelayMinSeconds
+  });
+}
+
+function persistCampaignEmailFromEditors(campaignId, options = {}) {
+  const card = document.querySelector(`.campaign-card [data-id="${cssEscape(campaignId)}"]`)?.closest(".campaign-card") || campaignList;
+  syncEmailEditors(card);
+
+  const subjectInput = card.querySelector(`[data-email-subject="${cssEscape(campaignId)}"]`);
+  const bodyInput = card.querySelector(`[data-email-body="${cssEscape(campaignId)}"]`);
+  if (!subjectInput && !bodyInput) return store.findCampaign(campaignId);
+
+  const campaign = store.findCampaign(campaignId);
+  if (!campaign) return null;
+
+  const subject = (subjectInput?.value || "").trim() || "Your certificate is ready";
+  const body = (bodyInput?.value || "").trim() || defaultEmailBody();
+  const changed = subject !== (campaign.emailSubject || "Your certificate is ready")
+    || body !== (campaign.emailBodyHtml || defaultEmailBody());
+
+  if (!changed && !options.force) return campaign;
+
+  return store.updateCampaign(campaignId, {
+    emailSubject: subject,
+    emailBodyHtml: body,
+    attachPdf: true
   });
 }
 

@@ -116,15 +116,19 @@ final class CertificateRenderer
      */
     public function html(TemplateLayout $layout, array $recipient): string
     {
-        $background = $layout->background !== null ? $this->backgroundCss($layout->background, $layout->normalizedBackgroundFit()) : '';
         $parts = [
             '<html><head><meta charset="UTF-8"><style>',
             '@page { margin: 0; }',
             'body { margin: 0; padding: 0; font-family: dejavusans, sans-serif; }',
-            '.page { position: relative; width: ' . $layout->width() . 'mm; height: ' . $layout->height() . 'mm; overflow: hidden; ' . $background . ' }',
+            '.page { position: relative; width: ' . $layout->width() . 'mm; height: ' . $layout->height() . 'mm; overflow: hidden; }',
             '.element { position: absolute; white-space: pre-wrap; line-height: 1.2; }',
+            '.text-element { box-sizing: border-box; padding: 1.6mm 2.4mm; }',
             '</style></head><body><div class="page">',
         ];
+
+        if ($layout->background !== null && trim($layout->background) !== '') {
+            $parts[] = $this->backgroundElement($layout);
+        }
 
         foreach ($layout->elements as $element) {
             $type = (string) ($element['type'] ?? 'csv_text');
@@ -149,7 +153,7 @@ final class CertificateRenderer
             $font = $this->fontFamily((string) ($element['font'] ?? 'dejavusans'));
 
             $style = sprintf(
-                'left:%smm; top:%smm; width:%smm; height:%smm; font-family:%s, dejavusans, sans-serif; font-size:%spt; text-align:%s; direction:%s; color:%s;',
+                'left:%smm; top:%smm; width:%smm; height:%smm; font-family:%s, dejavusans, sans-serif; font-size:%spx; text-align:%s; direction:%s; color:%s;',
                 (float) $element['x'],
                 (float) $element['y'],
                 (float) $element['width'],
@@ -161,7 +165,7 @@ final class CertificateRenderer
                 $color
             );
 
-            $parts[] = '<div class="element" style="' . $style . '">' . htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';
+            $parts[] = '<div class="element text-element" style="' . $style . '">' . htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';
         }
 
         $parts[] = '</div></body></html>';
@@ -208,29 +212,113 @@ final class CertificateRenderer
             default => 'contain',
         };
         $safePath = str_replace('\\', '/', $src);
+        $source = $this->imageSource($safePath);
         $style = sprintf(
             "left:%smm; top:%smm; width:%smm; height:%smm; background-image:url('%s'); background-repeat:no-repeat; background-position:center; background-size:%s;",
             (float) $element['x'],
             (float) $element['y'],
             (float) $element['width'],
             (float) $element['height'],
-            htmlspecialchars($safePath, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            htmlspecialchars($source, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             $size
         );
 
         return '<div class="element" style="' . $style . '"></div>';
     }
 
-    private function backgroundCss(string $backgroundPath, string $fit): string
+    private function backgroundElement(TemplateLayout $layout): string
     {
-        $safePath = str_replace('\\', '/', $backgroundPath);
-        $size = match ($fit) {
-            'cover' => 'cover',
-            'contain' => 'contain',
-            default => '100% 100%',
-        };
+        $safePath = str_replace('\\', '/', (string) $layout->background);
+        $source = $this->imageSource($safePath);
+        $frame = $this->backgroundFrame($layout, $safePath);
+        $style = sprintf(
+            'left:%smm; top:%smm; width:%smm; height:%smm;',
+            $frame['left'],
+            $frame['top'],
+            $frame['width'],
+            $frame['height']
+        );
 
-        return "background-image: url('" . htmlspecialchars($safePath, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "'); background-repeat: no-repeat; background-position: center; background-size: " . $size . ';';
+        return '<img src="' . htmlspecialchars($source, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" style="position:absolute; ' . $style . '" alt="">';
+    }
+
+    /**
+     * @return array{left: float, top: float, width: float, height: float}
+     */
+    private function backgroundFrame(TemplateLayout $layout, string $path): array
+    {
+        $pageWidth = $layout->width();
+        $pageHeight = $layout->height();
+        $fit = $layout->normalizedBackgroundFit();
+
+        if ($fit === 'stretch') {
+            return ['left' => 0.0, 'top' => 0.0, 'width' => $pageWidth, 'height' => $pageHeight];
+        }
+
+        $imageSize = $this->imageSize($path);
+        if ($imageSize === null) {
+            return ['left' => 0.0, 'top' => 0.0, 'width' => $pageWidth, 'height' => $pageHeight];
+        }
+
+        [$imageWidth, $imageHeight] = $imageSize;
+        if ($imageWidth <= 0 || $imageHeight <= 0) {
+            return ['left' => 0.0, 'top' => 0.0, 'width' => $pageWidth, 'height' => $pageHeight];
+        }
+
+        $scale = $fit === 'cover'
+            ? max($pageWidth / $imageWidth, $pageHeight / $imageHeight)
+            : min($pageWidth / $imageWidth, $pageHeight / $imageHeight);
+        $width = $imageWidth * $scale;
+        $height = $imageHeight * $scale;
+
+        return [
+            'left' => ($pageWidth - $width) / 2,
+            'top' => ($pageHeight - $height) / 2,
+            'width' => $width,
+            'height' => $height,
+        ];
+    }
+
+    /**
+     * @return null|array{0: int, 1: int}
+     */
+    private function imageSize(string $path): ?array
+    {
+        foreach ($this->imagePathCandidates($path) as $candidate) {
+            $size = @getimagesize($candidate);
+            if (is_array($size) && isset($size[0], $size[1])) {
+                return [(int) $size[0], (int) $size[1]];
+            }
+        }
+
+        return null;
+    }
+
+    private function imageSource(string $path): string
+    {
+        foreach ($this->imagePathCandidates($path) as $candidate) {
+            $resolved = realpath($candidate);
+            if ($resolved !== false && is_file($resolved)) {
+                return str_replace('\\', '/', $resolved);
+            }
+        }
+
+        return $path;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function imagePathCandidates(string $path): array
+    {
+        $candidates = [$path];
+        if (!preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) && !str_starts_with($path, '/')) {
+            $relativePath = str_replace('/', DIRECTORY_SEPARATOR, $path);
+            $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . $relativePath;
+            $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . $relativePath;
+        }
+
+        return $candidates;
     }
 
     /**
