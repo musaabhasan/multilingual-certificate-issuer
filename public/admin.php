@@ -88,8 +88,14 @@ function e(string $value): string
                 </form>
                 <div class="smtp-test-panel">
                     <div class="panel-header compact-header">
-                        <h3>Test email delivery</h3>
+                        <h3>SMTP verification</h3>
                         <span id="smtpTestStatus" class="status locked">Not tested</span>
+                    </div>
+                    <div class="action-row">
+                        <button id="smtpDiagnosticsButton" type="button">Run diagnostics</button>
+                    </div>
+                    <div id="smtpDiagnostics" class="diagnostics-list">
+                        <p class="form-note">Run diagnostics to examine the current SMTP mode, required fields, encryption, sender settings, and host connectivity.</p>
                     </div>
                     <form id="smtpTestForm" class="form-grid">
                         <label>Test recipient email <input id="smtpTestRecipient" type="email" required></label>

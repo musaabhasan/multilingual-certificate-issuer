@@ -71,6 +71,14 @@ try {
         ]);
     }
 
+    if ($action === 'settings-smtp-diagnostics' && $method === 'POST') {
+        app_require_admin($user);
+        app_json_response([
+            'diagnostics' => app_smtp_diagnostics(app_json_payload(), $user),
+            'csrf' => app_csrf_token(),
+        ]);
+    }
+
     if ($action === 'users' && $method === 'GET') {
         app_require_admin($user);
         app_json_response([

@@ -4,6 +4,8 @@ const settingsStatus = document.querySelector("#settingsStatus");
 const smtpTestForm = document.querySelector("#smtpTestForm");
 const smtpTestStatus = document.querySelector("#smtpTestStatus");
 const smtpTestResult = document.querySelector("#smtpTestResult");
+const smtpDiagnosticsButton = document.querySelector("#smtpDiagnosticsButton");
+const smtpDiagnostics = document.querySelector("#smtpDiagnostics");
 const usersStatus = document.querySelector("#usersStatus");
 const userList = document.querySelector("#userList");
 const userForm = document.querySelector("#userForm");
@@ -101,7 +103,74 @@ async function sendTestEmail(event) {
     setStatus(smtpTestStatus, "Test failed", "warning");
     smtpTestResult.textContent = error.message;
     smtpTestResult.className = "test-result warning";
+    await showSmtpDiagnosticsAfterFailure();
   }
+}
+
+async function showSmtpDiagnosticsAfterFailure() {
+  try {
+    const { diagnostics } = await adminAuth.api("POST", "settings-smtp-diagnostics", {
+      settings: currentSettingsPayload()
+    });
+    renderSmtpDiagnostics(diagnostics);
+  } catch (diagnosticError) {
+    smtpDiagnostics.innerHTML = `<p class="test-result warning">${escapeHtml(diagnosticError.message)}</p>`;
+  }
+}
+
+async function runSmtpDiagnostics() {
+  setStatus(smtpTestStatus, "Checking", "pending");
+  smtpDiagnostics.innerHTML = "<p class=\"form-note\">Checking SMTP configuration and host connectivity.</p>";
+
+  try {
+    const { diagnostics } = await adminAuth.api("POST", "settings-smtp-diagnostics", {
+      settings: currentSettingsPayload()
+    });
+    renderSmtpDiagnostics(diagnostics);
+    setStatus(smtpTestStatus, diagnostics.canSend ? "Ready to send" : "Review findings", diagnostics.canSend ? "ready" : "warning");
+    await loadAudit();
+  } catch (error) {
+    setStatus(smtpTestStatus, "Diagnostics failed", "warning");
+    smtpDiagnostics.innerHTML = `<p class="test-result warning">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderSmtpDiagnostics(diagnostics) {
+  const summary = diagnostics.summary || {};
+  const checks = Array.isArray(diagnostics.checks) ? diagnostics.checks : [];
+  smtpDiagnostics.innerHTML = `
+    <div class="diagnostics-summary">
+      <div><span>Mode</span><strong>${escapeHtml(summary.deliveryMode || "unknown")}</strong></div>
+      <div><span>Host</span><strong>${escapeHtml(summary.host ? `${summary.host}:${summary.port || ""}` : "Not configured")}</strong></div>
+      <div><span>Encryption</span><strong>${escapeHtml(summary.encryption || "-")}</strong></div>
+      <div><span>From</span><strong>${escapeHtml(summary.fromAddress || "Not configured")}</strong></div>
+      <div><span>Password</span><strong>${summary.hasPassword ? "Saved" : "Missing"}</strong></div>
+      <div><span>Checked</span><strong>${escapeHtml(shortDate(diagnostics.generatedAt))}</strong></div>
+    </div>
+    <div class="diagnostic-checks">
+      ${checks.map((check) => `
+        <div class="diagnostic-row ${escapeHtml(check.status)}">
+          <span class="status ${smtpDiagnosticStatusClass(check.status)}">${escapeHtml(smtpDiagnosticStatusLabel(check.status))}</span>
+          <div>
+            <strong>${escapeHtml(check.label)}</strong>
+            <p>${escapeHtml(check.detail)}</p>
+          </div>
+        </div>
+      `).join("") || "<p class=\"form-note\">No diagnostics returned.</p>"}
+    </div>
+  `;
+}
+
+function smtpDiagnosticStatusClass(status) {
+  if (status === "pass") return "ready";
+  if (status === "fail") return "failed";
+  return "warning";
+}
+
+function smtpDiagnosticStatusLabel(status) {
+  if (status === "pass") return "Pass";
+  if (status === "fail") return "Fail";
+  return "Review";
 }
 
 async function loadUsers() {
@@ -110,7 +179,7 @@ async function loadUsers() {
     <div class="mini-list-row">
       <div>
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.email)} · ${escapeHtml(user.role)}${user.lastLoginAt ? ` · Last login ${escapeHtml(shortDate(user.lastLoginAt))}` : ""}</span>
+        <span>${escapeHtml(user.email)} | ${escapeHtml(user.role)}${user.lastLoginAt ? ` | Last login ${escapeHtml(shortDate(user.lastLoginAt))}` : ""}</span>
       </div>
       <span class="status ${user.role === "administrator" && !user.mfa?.enabled ? "warning" : "ready"}">${escapeHtml(userStatusLabel(user))}</span>
     </div>
@@ -198,6 +267,7 @@ function escapeHtml(value) {
 
 settingsForm.addEventListener("submit", saveSettings);
 smtpTestForm.addEventListener("submit", sendTestEmail);
+smtpDiagnosticsButton.addEventListener("click", runSmtpDiagnostics);
 userForm.addEventListener("submit", createUser);
 passwordForm.addEventListener("submit", changePassword);
 refreshAudit.addEventListener("click", loadAudit);

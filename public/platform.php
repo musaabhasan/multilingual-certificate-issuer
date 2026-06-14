@@ -1341,6 +1341,244 @@ function app_time_or_null(string $value): ?int
     return $timestamp === false ? null : $timestamp;
 }
 
+function app_smtp_diagnostics(array $input, array $actor): array
+{
+    app_enforce_rate_limit('smtp-diagnostics', (string) ($actor['id'] ?? app_client_ip()) . ':' . app_client_ip(), 30, 3600);
+
+    $generatedAt = app_now();
+    try {
+        $settings = app_normalize_settings(is_array($input['settings'] ?? null) ? $input['settings'] : [], app_settings());
+    } catch (Throwable $error) {
+        app_audit('settings.smtp_diagnostics_failed', 'settings', null, [
+            'error' => substr($error->getMessage(), 0, 180),
+        ]);
+
+        return [
+            'generatedAt' => $generatedAt,
+            'canSend' => false,
+            'summary' => [
+                'deliveryMode' => 'invalid',
+                'host' => '',
+                'port' => 0,
+                'encryption' => '',
+                'fromAddress' => '',
+                'username' => '',
+                'hasPassword' => false,
+            ],
+            'checks' => [
+                app_smtp_diagnostic_check('settings_validation', 'Settings validation', 'fail', $error->getMessage()),
+            ],
+        ];
+    }
+
+    $smtp = $settings['smtp'];
+    $checks = app_smtp_diagnostic_checks($settings);
+    $hasFailure = count(array_filter($checks, static fn (array $check): bool => ($check['status'] ?? '') === 'fail')) > 0;
+    $canSend = !$hasFailure && ($smtp['deliveryMode'] ?? 'log') === 'smtp';
+
+    app_audit('settings.smtp_diagnostics_ran', 'settings', null, [
+        'host' => (string) ($smtp['host'] ?? ''),
+        'port' => (int) ($smtp['port'] ?? 587),
+        'mode' => (string) ($smtp['deliveryMode'] ?? 'log'),
+        'can_send' => $canSend,
+    ]);
+
+    return [
+        'generatedAt' => $generatedAt,
+        'canSend' => $canSend,
+        'summary' => [
+            'deliveryMode' => (string) ($smtp['deliveryMode'] ?? 'log'),
+            'host' => (string) ($smtp['host'] ?? ''),
+            'port' => (int) ($smtp['port'] ?? 587),
+            'encryption' => strtoupper((string) ($smtp['encryption'] ?? 'tls')),
+            'fromAddress' => (string) ($smtp['fromAddress'] ?? ''),
+            'fromName' => (string) ($smtp['fromName'] ?? ''),
+            'username' => (string) ($smtp['username'] ?? ''),
+            'hasPassword' => (string) ($smtp['encryptedPassword'] ?? '') !== '',
+        ],
+        'checks' => $checks,
+    ];
+}
+
+/**
+ * @return list<array{name:string,label:string,status:string,detail:string}>
+ */
+function app_smtp_diagnostic_checks(array $settings): array
+{
+    $smtp = $settings['smtp'];
+    $mode = (string) ($smtp['deliveryMode'] ?? 'log');
+    $host = trim((string) ($smtp['host'] ?? ''));
+    $port = (int) ($smtp['port'] ?? 587);
+    $encryption = (string) ($smtp['encryption'] ?? 'tls');
+    $username = trim((string) ($smtp['username'] ?? ''));
+    $fromAddress = trim((string) ($smtp['fromAddress'] ?? ''));
+    $hasPassword = (string) ($smtp['encryptedPassword'] ?? '') !== '';
+    $checks = [];
+
+    $checks[] = app_smtp_diagnostic_check(
+        'delivery_mode',
+        'Delivery mode',
+        $mode === 'smtp' ? 'pass' : 'warn',
+        $mode === 'smtp' ? 'SMTP sending is enabled.' : 'Local log mode is active; messages are rendered and logged without contacting SMTP.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'phpmailer',
+        'PHPMailer library',
+        class_exists(PHPMailer::class) ? 'pass' : 'fail',
+        class_exists(PHPMailer::class) ? 'PHPMailer is available for SMTP delivery.' : 'PHPMailer is missing; run composer install.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'openssl',
+        'OpenSSL extension',
+        extension_loaded('openssl') ? 'pass' : 'fail',
+        extension_loaded('openssl') ? 'OpenSSL is loaded for TLS/SSL SMTP connections.' : 'OpenSSL is required for encrypted SMTP connections.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'host',
+        'SMTP host',
+        $host !== '' ? 'pass' : ($mode === 'smtp' ? 'fail' : 'warn'),
+        $host !== '' ? $host : 'Set the SMTP hostname before enabling SMTP delivery.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'port',
+        'SMTP port',
+        $port >= 1 && $port <= 65535 ? 'pass' : 'fail',
+        $port >= 1 && $port <= 65535 ? (string) $port : 'Port must be between 1 and 65535.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'encryption',
+        'Encryption',
+        in_array($encryption, ['tls', 'ssl'], true) ? 'pass' : 'fail',
+        strtoupper($encryption)
+    );
+
+    if (($encryption === 'ssl' && $port !== 465) || ($encryption === 'tls' && !in_array($port, [25, 587, 2525], true))) {
+        $checks[] = app_smtp_diagnostic_check(
+            'port_encryption_pair',
+            'Port and encryption',
+            'warn',
+            'Common ports are 587 or 2525 for TLS and 465 for SSL. Confirm this provider-specific combination.'
+        );
+    } else {
+        $checks[] = app_smtp_diagnostic_check(
+            'port_encryption_pair',
+            'Port and encryption',
+            'pass',
+            'Port and encryption match common SMTP provider defaults.'
+        );
+    }
+
+    $providerGuidance = app_smtp_provider_guidance_check($host);
+    if ($providerGuidance !== null) {
+        $checks[] = $providerGuidance;
+    }
+
+    $checks[] = app_smtp_diagnostic_check(
+        'username',
+        'SMTP username',
+        $username !== '' ? 'pass' : ($mode === 'smtp' ? 'fail' : 'warn'),
+        $username !== '' ? 'Username is configured.' : 'Set the SMTP username before enabling SMTP delivery.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'password',
+        'SMTP password',
+        $hasPassword ? 'pass' : ($mode === 'smtp' ? 'fail' : 'warn'),
+        $hasPassword ? 'Encrypted password is saved or included in the current form.' : 'Set the SMTP password before enabling SMTP delivery.'
+    );
+    $checks[] = app_smtp_diagnostic_check(
+        'from_address',
+        'From address',
+        filter_var($fromAddress, FILTER_VALIDATE_EMAIL) ? 'pass' : ($mode === 'smtp' ? 'fail' : 'warn'),
+        filter_var($fromAddress, FILTER_VALIDATE_EMAIL) ? $fromAddress : 'Set a valid sender email address.'
+    );
+
+    $alignment = app_smtp_sender_alignment_detail($username, $fromAddress);
+    if ($alignment !== null) {
+        $checks[] = $alignment;
+    }
+
+    if ($mode === 'smtp' && $host !== '' && $port >= 1 && $port <= 65535) {
+        $checks[] = app_smtp_connectivity_check($host, $port, $encryption);
+    }
+
+    return $checks;
+}
+
+function app_smtp_provider_guidance_check(string $host): ?array
+{
+    $normalizedHost = strtolower($host);
+    if (!str_contains($normalizedHost, 'office365.com') && !str_contains($normalizedHost, 'outlook.com')) {
+        return null;
+    }
+
+    return app_smtp_diagnostic_check(
+        'microsoft_365_smtp_auth',
+        'Microsoft 365 SMTP AUTH',
+        'warn',
+        'For smtp.office365.com, authentication requires SMTP AUTH to be enabled for the tenant and this mailbox. If MFA, Conditional Access, or Security Defaults block password-based SMTP, use an allowed app password, OAuth-capable SMTP, Microsoft Graph mail, or an approved SMTP relay.'
+    );
+}
+
+function app_smtp_diagnostic_check(string $name, string $label, string $status, string $detail): array
+{
+    return [
+        'name' => $name,
+        'label' => $label,
+        'status' => in_array($status, ['pass', 'warn', 'fail'], true) ? $status : 'warn',
+        'detail' => $detail,
+    ];
+}
+
+function app_smtp_sender_alignment_detail(string $username, string $fromAddress): ?array
+{
+    if (!filter_var($username, FILTER_VALIDATE_EMAIL) || !filter_var($fromAddress, FILTER_VALIDATE_EMAIL)) {
+        return null;
+    }
+
+    $usernameDomain = strtolower(substr(strrchr($username, '@') ?: '', 1));
+    $fromDomain = strtolower(substr(strrchr($fromAddress, '@') ?: '', 1));
+    if ($usernameDomain === '' || $fromDomain === '') {
+        return null;
+    }
+
+    return app_smtp_diagnostic_check(
+        'sender_alignment',
+        'Sender alignment',
+        $usernameDomain === $fromDomain ? 'pass' : 'warn',
+        $usernameDomain === $fromDomain
+            ? 'SMTP username and From address use the same domain.'
+            : 'SMTP username and From address use different domains. Confirm this sender is allowed by your provider.'
+    );
+}
+
+function app_smtp_connectivity_check(string $host, int $port, string $encryption): array
+{
+    $scheme = $encryption === 'ssl' ? 'ssl' : 'tcp';
+    $target = $scheme . '://' . $host . ':' . $port;
+    $errorNumber = 0;
+    $errorMessage = '';
+    $startedAt = microtime(true);
+    $stream = @stream_socket_client($target, $errorNumber, $errorMessage, 8, STREAM_CLIENT_CONNECT);
+    $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+    if (is_resource($stream)) {
+        fclose($stream);
+        return app_smtp_diagnostic_check(
+            'connectivity',
+            'Network connectivity',
+            'pass',
+            'Connected to ' . $host . ':' . $port . ' in ' . $elapsedMs . ' ms. Send a test email to verify authentication and sender permissions.'
+        );
+    }
+
+    return app_smtp_diagnostic_check(
+        'connectivity',
+        'Network connectivity',
+        'fail',
+        'Could not connect to ' . $host . ':' . $port . ($errorMessage !== '' ? ' (' . $errorMessage . ')' : '') . '.'
+    );
+}
+
 function app_send_smtp_test_email(array $input, array $actor): array
 {
     app_enforce_rate_limit('smtp-test-email', (string) ($actor['id'] ?? app_client_ip()) . ':' . app_client_ip(), 8, 3600);
@@ -1378,13 +1616,14 @@ function app_send_smtp_test_email(array $input, array $actor): array
     try {
         app_send_smtp_message($settings, $recipientEmail, $recipientName, $subject, $body);
     } catch (Throwable $error) {
+        $publicError = app_smtp_public_error_message($error, $smtp);
         app_audit('settings.smtp_test_failed', 'settings', null, [
             'recipient_hash' => hash('sha256', $recipientEmail),
             'host' => (string) ($smtp['host'] ?? ''),
             'port' => (int) ($smtp['port'] ?? 587),
-            'error' => substr($error->getMessage(), 0, 180),
+            'error' => substr($publicError, 0, 180),
         ]);
-        throw new RuntimeException('SMTP test failed: ' . $error->getMessage(), 0, $error);
+        throw new RuntimeException('SMTP test failed: ' . $publicError, 0, $error);
     }
 
     app_audit('settings.smtp_test_sent', 'settings', null, [
@@ -1400,6 +1639,26 @@ function app_send_smtp_test_email(array $input, array $actor): array
         'port' => (int) ($smtp['port'] ?? 587),
         'encryption' => (string) ($smtp['encryption'] ?? 'tls'),
     ];
+}
+
+function app_smtp_public_error_message(Throwable $error, array $smtp): string
+{
+    $message = trim($error->getMessage());
+    $host = strtolower((string) ($smtp['host'] ?? ''));
+    $isAuthenticationFailure = stripos($message, 'authenticate') !== false
+        || stripos($message, 'authentication') !== false
+        || stripos($message, '5.7.') !== false;
+
+    if ($isAuthenticationFailure) {
+        $providerNote = '';
+        if (str_contains($host, 'office365.com') || str_contains($host, 'outlook.com')) {
+            $providerNote = ' For Microsoft 365, confirm Authenticated SMTP is enabled for the organization and mailbox, the username/password are for that mailbox, and MFA or Conditional Access is not blocking password-based SMTP. If password-based SMTP is blocked, use an allowed app password, OAuth-capable SMTP, Microsoft Graph mail, or an approved SMTP relay.';
+        }
+
+        return 'Authentication was rejected by the SMTP server.' . $providerNote . ($message !== '' ? ' Server response: ' . $message : '');
+    }
+
+    return $message !== '' ? $message : 'The SMTP server rejected the test message.';
 }
 
 function app_send_smtp(array $settings, string $recipientEmail, string $recipientName, string $subject, string $body, string $pdfPath): void
