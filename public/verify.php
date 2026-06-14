@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || ($certificateNumber !== '' && $toke
     try {
         $lookup = app_verify_certificate_lookup($certificateNumber, $token);
     } catch (Throwable $exception) {
-        $error = $exception->getMessage();
+        $error = 'Verification request could not be processed.';
     }
 }
 
@@ -50,7 +50,7 @@ function e(string $value): string
         <div>
             <p class="eyebrow">Credential verification</p>
             <h1>Verify a certificate</h1>
-            <p>Use the certificate number and verification token from the issued certificate email.</p>
+            <p>Scan the certificate QR code or enter the certificate number and verification token.</p>
         </div>
     </section>
 
@@ -58,6 +58,7 @@ function e(string $value): string
         <label>Certificate number <input name="certificate_number" autocomplete="off" required placeholder="CERT-2026-001" value="<?= e($certificateNumber) ?>"></label>
         <label>Verification token <input name="token" autocomplete="off" required placeholder="Token from verification link" value="<?= e($token) ?>"></label>
         <button class="primary" type="submit">Verify certificate</button>
+        <p class="form-note">Recipient names, email addresses, and private certificate files are not exposed by the public verification result.</p>
     </form>
 
     <?php if ($searched && $lookup === null): ?>
@@ -69,13 +70,14 @@ function e(string $value): string
     <?php elseif (is_array($lookup)): ?>
         <section class="panel verification-result">
             <span class="<?= $lookup['status'] === 'valid' ? 'status ready' : 'status failed' ?>"><?= e(ucfirst((string) $lookup['status'])) ?></span>
-            <h2>Certificate metadata</h2>
+            <h2><?= $lookup['status'] === 'valid' ? 'Certificate verified' : 'Certificate not valid' ?></h2>
             <dl class="detail-list">
-                <div><dt>Recipient</dt><dd><?= e((string) $lookup['recipient']) ?><?php if ($lookup['recipientArabic'] !== ''): ?> / <span dir="rtl"><?= e((string) $lookup['recipientArabic']) ?></span><?php endif; ?></dd></div>
+                <div><dt>Issuer</dt><dd><?= e((string) $lookup['issuer']) ?></dd></div>
                 <div><dt>Campaign</dt><dd><?= e((string) $lookup['campaign']) ?></dd></div>
                 <div><dt>Template</dt><dd><?= e((string) $lookup['template']) ?></dd></div>
                 <div><dt>Identifier</dt><dd><?= e((string) $lookup['certificateNumber']) ?></dd></div>
-                <div><dt>Sent at</dt><dd><?= e((string) $lookup['sentAt']) ?></dd></div>
+                <div><dt>Issued at</dt><dd><?= e((string) ($lookup['sentAt'] ?: $lookup['renderedAt'])) ?></dd></div>
+                <div><dt>Verified at</dt><dd><?= e((string) $lookup['verifiedAt']) ?></dd></div>
                 <div><dt>PDF hash</dt><dd><code><?= e($lookup['pdfSha256'] !== '' ? 'sha256:' . (string) $lookup['pdfSha256'] : 'PDF hash unavailable') ?></code></dd></div>
             </dl>
         </section>

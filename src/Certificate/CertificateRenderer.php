@@ -123,6 +123,11 @@ final class CertificateRenderer
 
         foreach ($layout->elements as $element) {
             $type = (string) ($element['type'] ?? 'csv_text');
+            if ($type === 'verification_qr') {
+                $parts[] = $this->verificationQrElement($element, $recipient);
+                continue;
+            }
+
             if ($type === 'image') {
                 $parts[] = $this->imageElement($element);
                 continue;
@@ -156,6 +161,28 @@ final class CertificateRenderer
 
         $parts[] = '</div></body></html>';
         return implode('', $parts);
+    }
+
+    /**
+     * @param array<string, mixed> $element
+     * @param array<string, string> $recipient
+     */
+    private function verificationQrElement(array $element, array $recipient): string
+    {
+        $src = trim((string) ($recipient['verification_qr_data_uri'] ?? ''));
+        $style = sprintf(
+            'left:%smm; top:%smm; width:%smm; height:%smm; background:#ffffff; text-align:center;',
+            (float) $element['x'],
+            (float) $element['y'],
+            (float) $element['width'],
+            (float) $element['height']
+        );
+
+        if ($src === '') {
+            return '<div class="element" style="' . $style . ' font-size:7pt; text-align:center; color:#536275;">Verification QR unavailable</div>';
+        }
+
+        return '<div class="element" style="' . $style . '"><img src="' . htmlspecialchars($src, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '" style="width:100%; height:100%;" alt="Certificate verification QR"></div>';
     }
 
     /**

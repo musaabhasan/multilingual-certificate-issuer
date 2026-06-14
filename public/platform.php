@@ -145,6 +145,7 @@ function app_seed_state(): array
                         app_seed_field('recipient_name_en', 'Recipient Name', 'name_en', 87, 80, 'ltr', 22),
                         app_seed_field('recipient_name_ar', 'اسم المستلم', 'name_ar', 88, 98, 'rtl', 24, 'bukra_book_slanted'),
                         app_seed_field('program_en', 'Program', 'program_en', 92, 122, 'ltr', 16),
+                        app_seed_verification_qr(251, 164),
                     ],
                 ],
             ],
@@ -161,6 +162,7 @@ function app_seed_state(): array
                         app_seed_field('recipient_name_en', 'Recipient Name', 'name_en', 86, 82, 'ltr', 22),
                         app_seed_field('recipient_name_ar', 'اسم المستلم', 'name_ar', 86, 101, 'rtl', 24, 'bukra_book_slanted'),
                         app_seed_field('issue_date', 'Issue Date', 'issue_date', 122, 148, 'ltr', 13),
+                        app_seed_verification_qr(251, 164),
                     ],
                 ],
             ],
@@ -185,6 +187,20 @@ function app_seed_field(string $key, string $label, string $source, float $x, fl
         'align' => 'center',
         'direction' => $direction,
         'color' => '#111827',
+    ];
+}
+
+function app_seed_verification_qr(float $x, float $y): array
+{
+    return [
+        'type' => 'verification_qr',
+        'key' => 'verification_qr',
+        'label' => 'Verification QR',
+        'x' => $x,
+        'y' => $y,
+        'width' => 28,
+        'height' => 28,
+        'fit' => 'contain',
     ];
 }
 
@@ -681,23 +697,23 @@ function app_mfa_start_enrollment(string $userId): array
     return [
         'secret' => $secret,
         'uri' => $uri,
-        'qrDataUri' => app_mfa_qr_data_uri($uri),
+        'qrDataUri' => app_qr_data_uri($uri),
         'user' => $user,
     ];
 }
 
-function app_mfa_qr_data_uri(string $uri): string
+function app_qr_data_uri(string $text, int $size = 260, int $margin = 12): string
 {
     if (!class_exists(QrCode::class) || !extension_loaded('gd')) {
         return '';
     }
 
     try {
-        $qrCode = QrCode::create($uri)
+        $qrCode = QrCode::create($text)
             ->setEncoding(new Encoding('UTF-8'))
             ->setErrorCorrectionLevel(ErrorCorrectionLevel::Medium)
-            ->setSize(260)
-            ->setMargin(12)
+            ->setSize(max(96, min(800, $size)))
+            ->setMargin(max(0, min(40, $margin)))
             ->setRoundBlockSizeMode(RoundBlockSizeMode::Margin)
             ->setForegroundColor(new Color(15, 23, 42))
             ->setBackgroundColor(new Color(255, 255, 255));
@@ -1255,6 +1271,9 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
         background: isset($template['layout']['background']) ? (string) $template['layout']['background'] : null,
         elements: is_array($template['layout']['elements'] ?? null) ? $template['layout']['elements'] : []
     );
+    if (app_template_has_verification_qr($layout->elements)) {
+        $data['verification_qr_data_uri'] = app_qr_data_uri($verificationUrl, 420, 10);
+    }
     (new CertificateRenderer())->renderPdf($layout, array_map('strval', $data), $pdfPath);
 
     $settings = app_settings();
@@ -1290,6 +1309,17 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
         ],
         'message' => $message,
     ];
+}
+
+function app_template_has_verification_qr(array $elements): bool
+{
+    foreach ($elements as $element) {
+        if (is_array($element) && (string) ($element['type'] ?? '') === 'verification_qr') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function app_next_send_after(array $campaign): string
@@ -1444,20 +1474,21 @@ function app_verify_certificate_lookup(string $certificateNumber, string $token)
             $absolutePath = $certificatePath !== '' ? dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $certificatePath) : '';
             $pdfHash = is_file($absolutePath) ? (string) hash_file('sha256', $absolutePath) : '';
             $status = in_array(($recipient['status'] ?? ''), ['sent', 'rendered'], true) ? 'valid' : 'invalid';
+            $settings = app_settings();
 
             app_audit($status === 'valid' ? 'certificate.verify_success' : 'certificate.verify_invalid_status', 'certificate', $certificateNumber);
             return [
                 'status' => $status,
+                'valid' => $status === 'valid',
                 'certificateNumber' => $certificateNumber,
-                'recipient' => (string) ($recipient['displayName'] ?? $data['name_en'] ?? $data['name_ar'] ?? ''),
-                'recipientArabic' => (string) ($data['name_ar'] ?? ''),
-                'email' => (string) ($recipient['email'] ?? $data['email'] ?? ''),
+                'issuer' => (string) ($settings['platform']['name'] ?? 'Certificate Issuer'),
                 'campaign' => (string) ($campaign['name'] ?? ''),
                 'template' => (string) ($template['name'] ?? ''),
                 'sentAt' => (string) ($recipient['sentAt'] ?? ''),
                 'renderedAt' => (string) ($recipient['renderedAt'] ?? ''),
+                'verificationIssuedAt' => (string) ($recipient['verificationIssuedAt'] ?? ''),
                 'pdfSha256' => $pdfHash,
-                'certificatePath' => $certificatePath,
+                'verifiedAt' => app_now(),
             ];
         }
     }

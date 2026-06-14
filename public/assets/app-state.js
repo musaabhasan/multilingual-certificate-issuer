@@ -17,7 +17,8 @@
           elements: [
             field("recipient_name_en", "Recipient Name", "name_en", 87, 80, "ltr", 22),
             field("recipient_name_ar", "اسم المستلم", "name_ar", 88, 98, "rtl", 24, "bukra_book_slanted"),
-            field("program_en", "Program", "program_en", 92, 122, "ltr", 16)
+            field("program_en", "Program", "program_en", 92, 122, "ltr", 16),
+            verificationQr(251, 164)
           ]
         }
       },
@@ -33,7 +34,8 @@
           elements: [
             field("recipient_name_en", "Recipient Name", "name_en", 86, 82, "ltr", 22),
             field("recipient_name_ar", "اسم المستلم", "name_ar", 86, 101, "rtl", 24, "bukra_book_slanted"),
-            field("issue_date", "Issue Date", "issue_date", 122, 148, "ltr", 13)
+            field("issue_date", "Issue Date", "issue_date", 122, 148, "ltr", 13),
+            verificationQr(251, 164)
           ]
         }
       }
@@ -105,6 +107,19 @@
       align: "center",
       direction,
       color: "#111827"
+    };
+  }
+
+  function verificationQr(x, y) {
+    return {
+      type: "verification_qr",
+      key: "verification_qr",
+      label: "Verification QR",
+      x,
+      y,
+      width: 28,
+      height: 28,
+      fit: "contain"
     };
   }
 

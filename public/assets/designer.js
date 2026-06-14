@@ -3,6 +3,7 @@ const output = document.querySelector("#layoutOutput");
 const addCsvField = document.querySelector("#addCsvField");
 const addStaticText = document.querySelector("#addStaticText");
 const addImage = document.querySelector("#addImage");
+const addVerificationQr = document.querySelector("#addVerificationQr");
 const exportLayout = document.querySelector("#exportLayout");
 const applyField = document.querySelector("#applyField");
 const duplicateItem = document.querySelector("#duplicateItem");
@@ -142,10 +143,21 @@ function addImageItem(settings = {}) {
   });
 }
 
+function addVerificationQrItem(settings = {}) {
+  return addItem({
+    type: "verification_qr",
+    label: settings.label || "Verification QR",
+    fit: "contain",
+    width: settings.width || 82,
+    height: settings.height || 82,
+    ...settings
+  });
+}
+
 function addItem(settings = {}) {
   const item = document.createElement("div");
   const type = settings.type || "csv_text";
-  item.className = `design-item ${type === "image" ? "image-item" : "text-box"}`;
+  item.className = `design-item ${isVisualItem(type) ? "image-item" : "text-box"}`;
   item.dataset.type = type;
   item.dataset.key = settings.key || `${type}_${counter}`;
   item.dataset.label = settings.label || `Item ${counter}`;
@@ -167,7 +179,7 @@ function addItem(settings = {}) {
   item.addEventListener("focus", () => selectItem(item));
   item.addEventListener("click", () => selectItem(item));
 
-  if (type !== "image") {
+  if (!isVisualItem(type)) {
     item.contentEditable = "true";
     item.addEventListener("input", () => {
       if (item.dataset.type === "static_text") {
@@ -192,14 +204,18 @@ function addItem(settings = {}) {
 
 function applyItemStyles(item) {
   const type = item.dataset.type;
-  item.className = `design-item ${type === "image" ? "image-item" : "text-box"}${selected === item ? " selected" : ""}`;
+  item.className = `design-item ${isVisualItem(type) ? "image-item" : "text-box"}${selected === item ? " selected" : ""}`;
   item.style.textAlign = item.dataset.align;
   item.style.direction = item.dataset.direction;
   item.style.fontSize = `${item.dataset.fontSize}px`;
   item.style.fontFamily = `${fontCssFamily(item.dataset.font)}, "DejaVu Sans", sans-serif`;
   item.style.color = item.dataset.color;
 
-  if (type === "image") {
+  if (type === "verification_qr") {
+    item.textContent = "Verification QR";
+    item.style.backgroundImage = "linear-gradient(90deg, #0f172a 10px, transparent 10px), linear-gradient(#0f172a 10px, transparent 10px)";
+    item.style.backgroundSize = "22px 22px";
+  } else if (type === "image") {
     const imageUrl = item.dataset.previewUrl || browserAssetUrl(item.dataset.src);
     item.textContent = imageUrl ? "" : "Image";
     item.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : "";
@@ -337,7 +353,9 @@ function currentLayout() {
       height: roundMm(rect.height / canvasRect.height * 210)
     };
 
-    if (element.type === "image") {
+    if (element.type === "verification_qr") {
+      element.fit = "contain";
+    } else if (element.type === "image") {
       element.src = item.dataset.src;
       element.fit = item.dataset.fit || "contain";
     } else {
@@ -432,7 +450,9 @@ function loadLayout(layout) {
       height: (Number(element.height || 14) / 210) * canvasRect.height
     };
 
-    if ((element.type || "csv_text") === "image") {
+    if ((element.type || "csv_text") === "verification_qr") {
+      addVerificationQrItem({ ...base, fit: element.fit || "contain" });
+    } else if ((element.type || "csv_text") === "image") {
       addImageItem({ ...base, src: element.src || element.path || "", fit: element.fit || "contain" });
     } else if (element.type === "static_text") {
       addStaticTextItem({
@@ -536,7 +556,12 @@ function labelFromSource(source) {
 function itemTypeLabel(type) {
   if (type === "static_text") return "Text";
   if (type === "image") return "Image";
+  if (type === "verification_qr") return "Verification QR";
   return "CSV field";
+}
+
+function isVisualItem(type) {
+  return type === "image" || type === "verification_qr";
 }
 
 function selectedRectPx(item) {
@@ -605,6 +630,14 @@ function escapeHtml(value) {
 addCsvField.addEventListener("click", () => addCsvTextItem({ left: 150, top: 150 }));
 addStaticText.addEventListener("click", () => addStaticTextItem({ left: 150, top: 190, text: "Certificate text" }));
 addImage.addEventListener("click", () => addImageItem({ left: 90, top: 60, label: "Image" }));
+addVerificationQr.addEventListener("click", () => {
+  const rect = canvas.getBoundingClientRect();
+  addVerificationQrItem({
+    left: Math.max(16, rect.width - 110),
+    top: Math.max(16, rect.height - 110),
+    label: "Verification QR"
+  });
+});
 exportLayout.addEventListener("click", exportJson);
 applyField.addEventListener("click", applySelectedItem);
 duplicateItem.addEventListener("click", duplicateSelectedItem);
