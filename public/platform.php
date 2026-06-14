@@ -1133,20 +1133,27 @@ function app_update_campaign_status(string $campaignId, string $status): array
         $startAt = app_time_or_null((string) ($campaign['windowStartAt'] ?? $campaign['scheduledAt'] ?? ''));
         $endAt = app_time_or_null((string) ($campaign['windowEndAt'] ?? ''));
 
-        if ($startAt === null || $startAt > $now) {
+        if ($startAt === null) {
             $campaign['windowStartAt'] = app_now();
             $campaign['scheduledAt'] = $campaign['windowStartAt'];
             $campaign['nextSendAfterAt'] = '';
+        } elseif ($startAt > $now) {
+            $status = 'scheduled';
+            $campaign['status'] = 'scheduled';
+            $campaign['scheduledAt'] = $campaign['windowStartAt'] ?? gmdate('c', $startAt);
+            $campaign['nextSendAfterAt'] = '';
+            $eventMessage = 'Campaign scheduled for delivery at the selected start time.';
         }
 
         if ($pending > 0 && $endAt !== null && $endAt <= $now) {
-            $duration = app_recommended_window_seconds($campaign, $pending);
+            $status = 'running';
+            $campaign['status'] = 'running';
             $campaign['windowStartAt'] = app_now();
             $campaign['scheduledAt'] = $campaign['windowStartAt'];
-            $campaign['windowEndAt'] = gmdate('c', $now + $duration);
+            $campaign['windowEndAt'] = '';
             $campaign['windowExpiredAt'] = '';
             $campaign['nextSendAfterAt'] = '';
-            $eventMessage = 'Campaign restarted with a fresh delivery window because the previous window had ended.';
+            $eventMessage = 'Campaign restarted with an open delivery window because the previous window had ended.';
         }
     }
 
@@ -1309,7 +1316,7 @@ function app_dispatch_due_campaigns(): array
                 $campaign['updatedAt'] = app_now();
                 $campaign['deliveryEvents'] = array_slice([
                     ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
-                    ['at' => app_now(), 'message' => 'Delivery window ended with queued recipients. Extend the campaign end time to continue scheduled sending.'],
+                    ['at' => app_now(), 'message' => 'Delivery window ended with queued recipients. Restart the window, clear the end time, or extend the campaign end time to continue scheduled sending.'],
                 ], -80);
                 $state['campaigns'][$index] = $campaign;
                 $changed = true;

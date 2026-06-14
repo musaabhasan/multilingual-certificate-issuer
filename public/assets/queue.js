@@ -70,11 +70,16 @@ function renderCampaignQueue(campaign) {
   const progress = recipients > 0 ? Math.round((sent / recipients) * 100) : 0;
   const expired = isWindowExpired(campaign, plan);
   const planClass = !expired && plan.fitsMinimumWindow ? "status ready" : "status warning";
-  const planLabel = expired
+  const planLabel = plan.continuesUntilComplete
+    ? "Open delivery window continues until complete."
+    : expired
     ? "Delivery window ended. Restart the window or extend the end time to continue sending."
     : (plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer");
   const events = (campaign.deliveryEvents || []).slice(-4).reverse();
   const recipientRows = (campaign.recipientQueue || []).slice(0, 10);
+  const randomUnit = queueStore.normalizeDelayUnit(campaign.randomDelayUnit);
+  const randomMinAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMinSeconds, randomUnit);
+  const randomMaxAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
 
   return `
     <article class="campaign-card">
@@ -108,13 +113,16 @@ function renderCampaignQueue(campaign) {
             <input data-schedule-start="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowStartAt || campaign.scheduledAt))}">
           </label>
           <label>Send end
-            <input data-schedule-end="${escapeHtml(campaign.id)}" type="datetime-local" value="${escapeAttribute(toDateTimeInput(campaign.windowEndAt))}">
+            <input data-schedule-end="${escapeHtml(campaign.id)}" type="datetime-local" placeholder="Until complete" value="${escapeAttribute(toDateTimeInput(campaign.windowEndAt))}">
           </label>
-          <label>Random delay min seconds
-            <input data-schedule-min="${escapeHtml(campaign.id)}" type="number" min="0" value="${Number(campaign.randomDelayMinSeconds || 0)}">
+          <label>Delay unit
+            <select data-schedule-unit="${escapeHtml(campaign.id)}">${delayUnitOptionsMarkup(randomUnit)}</select>
           </label>
-          <label>Random delay max seconds
-            <input data-schedule-max="${escapeHtml(campaign.id)}" type="number" min="0" value="${Number(campaign.randomDelayMaxSeconds || 0)}">
+          <label>Random delay min
+            <input data-schedule-min="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMinAmount)}">
+          </label>
+          <label>Random delay max
+            <input data-schedule-max="${escapeHtml(campaign.id)}" type="number" min="0" step="0.01" value="${escapeAttribute(randomMaxAmount)}">
           </label>
           <button type="button" data-action="save-schedule" data-id="${escapeHtml(campaign.id)}">Save schedule</button>
         </div>
@@ -278,6 +286,8 @@ function nextSendLabel(campaign, plan) {
   if (campaign.nextSendAfterAt) return shortTime(campaign.nextSendAfterAt);
   if (!plan.start || plan.recipients === 0) return "Not scheduled";
   if (Number(campaign.sent || 0) >= plan.recipients) return "Done";
+  if (plan.start.getTime() > Date.now()) return shortTime(plan.start.toISOString());
+  if (plan.pendingRecipients > 0) return "Due now";
 
   const next = new Date(plan.start.getTime() + Number(campaign.sent || 0) * plan.calculatedSpacingSeconds * 1000);
   return shortTime(next.toISOString());
@@ -285,7 +295,7 @@ function nextSendLabel(campaign, plan) {
 
 function windowLabel(campaign) {
   if (!campaign.windowStartAt && !campaign.windowEndAt) return "Not set";
-  return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "?"}`;
+  return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "completion"}`;
 }
 
 function saveCampaignSchedule(campaignId) {
@@ -296,16 +306,19 @@ function saveCampaignSchedule(campaignId) {
 
   const startValue = document.querySelector(`[data-schedule-start="${cssEscape(campaignId)}"]`)?.value || "";
   const endValue = document.querySelector(`[data-schedule-end="${cssEscape(campaignId)}"]`)?.value || "";
-  const minValue = Number(document.querySelector(`[data-schedule-min="${cssEscape(campaignId)}"]`)?.value || 0);
-  const maxValue = Number(document.querySelector(`[data-schedule-max="${cssEscape(campaignId)}"]`)?.value || 0);
+  const randomDelayUnit = queueStore.normalizeDelayUnit(document.querySelector(`[data-schedule-unit="${cssEscape(campaignId)}"]`)?.value || "seconds");
+  const minValue = document.querySelector(`[data-schedule-min="${cssEscape(campaignId)}"]`)?.value || 0;
+  const maxValue = document.querySelector(`[data-schedule-max="${cssEscape(campaignId)}"]`)?.value || 0;
+  const randomDelayMinSeconds = queueStore.delayAmountToSeconds(minValue, randomDelayUnit);
+  const randomDelayMaxSeconds = queueStore.delayAmountToSeconds(maxValue, randomDelayUnit);
   const windowStartAt = toIsoDateTime(startValue);
   const windowEndAt = toIsoDateTime(endValue);
 
   if (windowStartAt && windowEndAt && new Date(windowEndAt).getTime() <= new Date(windowStartAt).getTime()) {
-    throw new Error("Send end must be after send start.");
+    throw new Error("Send end must be after send start, or leave it blank to continue until complete.");
   }
 
-  if (maxValue < minValue) {
+  if (randomDelayMaxSeconds < randomDelayMinSeconds) {
     throw new Error("Random delay max must be greater than or equal to the minimum.");
   }
 
@@ -321,9 +334,10 @@ function saveCampaignSchedule(campaignId) {
     windowEndAt,
     windowExpiredAt: "",
     nextSendAfterAt: "",
-    randomDelayMinSeconds: Math.max(0, minValue),
-    randomDelayMaxSeconds: Math.max(minValue, maxValue),
-    throttleSeconds: Math.max(0, minValue),
+    randomDelayUnit,
+    randomDelayMinSeconds,
+    randomDelayMaxSeconds,
+    throttleSeconds: randomDelayMinSeconds,
     deliveryEvents: addQueueEvent(campaign, "Campaign schedule and send buffer updated.")
   });
 }
@@ -352,6 +366,13 @@ function toDateTimeInput(value) {
   if (Number.isNaN(date.getTime())) return "";
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 16);
+}
+
+function delayUnitOptionsMarkup(selectedUnit) {
+  return queueStore.delayUnitOptions().map((unit) => {
+    const selected = unit.value === selectedUnit ? " selected" : "";
+    return `<option value="${escapeHtml(unit.value)}"${selected}>${escapeHtml(unit.label)}</option>`;
+  }).join("");
 }
 
 function toIsoDateTime(value) {

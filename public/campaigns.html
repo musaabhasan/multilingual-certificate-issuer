@@ -107,9 +107,18 @@
                     </table>
                 </div>
                 <label>Send start <input id="campaignStart" type="datetime-local"></label>
-                <label>Send end <input id="campaignEnd" type="datetime-local"></label>
-                <label>Random delay min seconds <input id="campaignRandomMin" type="number" min="0" value="45"></label>
-                <label>Random delay max seconds <input id="campaignRandomMax" type="number" min="0" value="75"></label>
+                <label>Send end <input id="campaignEnd" type="datetime-local" placeholder="Until complete"></label>
+                <label>Delay unit
+                    <select id="campaignRandomUnit">
+                        <option value="seconds">Seconds</option>
+                        <option value="hundreds_seconds">Hundreds of seconds</option>
+                        <option value="minutes">Minutes</option>
+                        <option value="tens_minutes">Tens of minutes</option>
+                        <option value="hours">Hours</option>
+                    </select>
+                </label>
+                <label>Random delay min <input id="campaignRandomMin" type="number" min="0" step="0.01" value="45"></label>
+                <label>Random delay max <input id="campaignRandomMax" type="number" min="0" step="0.01" value="75"></label>
                 <label>SMTP profile <input id="campaignSmtp" type="text" value="Institution SMTP"></label>
                 <label class="wide-field">Email subject <input id="campaignEmailSubject" type="text" value="Your certificate is ready"></label>
                 <label class="wide-field">Email body

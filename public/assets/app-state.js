@@ -2,6 +2,13 @@
   const storageKey = "certificateIssuerState";
   let cachedState = null;
   let cachedSettings = null;
+  const delayUnits = Object.freeze({
+    seconds: { label: "Seconds", multiplier: 1 },
+    hundreds_seconds: { label: "Hundreds of seconds", multiplier: 100 },
+    minutes: { label: "Minutes", multiplier: 60 },
+    tens_minutes: { label: "Tens of minutes", multiplier: 600 },
+    hours: { label: "Hours", multiplier: 3600 }
+  });
 
   const seedState = {
     templates: [
@@ -49,6 +56,7 @@
         scheduledAt: "2026-05-08T18:00",
         windowStartAt: "2026-05-08T18:00",
         windowEndAt: "2026-05-08T22:00",
+        randomDelayUnit: "seconds",
         randomDelayMinSeconds: 45,
         randomDelayMaxSeconds: 75,
         throttleSeconds: 60,
@@ -75,6 +83,7 @@
         scheduledAt: "2026-06-20T09:00",
         windowStartAt: "2026-06-20T09:00",
         windowEndAt: "2026-06-20T12:00",
+        randomDelayUnit: "seconds",
         randomDelayMinSeconds: 70,
         randomDelayMaxSeconds: 100,
         throttleSeconds: 45,
@@ -312,6 +321,7 @@
       : buildRecipientQueue(campaign.recipientRecords || []);
     const counts = recipientQueue.length > 0 ? queueCounts(recipientQueue) : null;
     const recipients = counts?.recipients ?? Number(campaign.recipients || 0);
+    const randomUnit = normalizeDelayUnit(campaign.randomDelayUnit);
     const randomMin = Number(campaign.randomDelayMinSeconds ?? Math.max(30, Number(campaign.throttleSeconds || 60) - 15));
     const randomMax = Number(campaign.randomDelayMaxSeconds ?? Math.max(randomMin, Number(campaign.throttleSeconds || 60) + 15));
 
@@ -325,6 +335,7 @@
       windowStartAt: campaign.windowStartAt || campaign.scheduledAt || "",
       windowEndAt: campaign.windowEndAt || "",
       windowExpiredAt: campaign.windowExpiredAt || "",
+      randomDelayUnit: randomUnit,
       randomDelayMinSeconds: randomMin,
       randomDelayMaxSeconds: Math.max(randomMin, randomMax),
       templateSource: campaign.templateSource || "saved_template",
@@ -464,28 +475,36 @@
   function deliveryPlan(campaign) {
     const normalized = normalizeCampaign(campaign);
     const recipients = Math.max(Number(normalized.recipients || 0) - Number(normalized.failed || 0), 0);
+    const pendingRecipients = Math.max(recipients - Number(normalized.sent || 0), 0);
     const start = parseLocalDateTime(normalized.windowStartAt || normalized.scheduledAt);
     const end = parseLocalDateTime(normalized.windowEndAt);
     const windowSeconds = start && end && end > start ? Math.floor((end - start) / 1000) : 0;
-    const calculatedSpacingSeconds = recipients > 1 && windowSeconds > 0
-      ? Math.max(1, Math.floor(windowSeconds / (recipients - 1)))
-      : Number(normalized.throttleSeconds || normalized.randomDelayMinSeconds || 60);
-    const randomMin = Math.max(0, Number(normalized.randomDelayMinSeconds || calculatedSpacingSeconds));
-    const randomMax = Math.max(randomMin, Number(normalized.randomDelayMaxSeconds || calculatedSpacingSeconds));
-    const minimumWindowSeconds = recipients > 1 ? randomMin * (recipients - 1) : 0;
-    const maximumWindowSeconds = recipients > 1 ? randomMax * (recipients - 1) : 0;
+    const randomMin = Math.max(0, Number(normalized.randomDelayMinSeconds ?? normalized.throttleSeconds ?? 60));
+    const randomMax = Math.max(randomMin, Number(normalized.randomDelayMaxSeconds ?? randomMin));
+    const randomAverageSeconds = Math.max(0, Math.round((randomMin + randomMax) / 2));
+    const spacingRecipients = pendingRecipients > 0 ? pendingRecipients : recipients;
+    const calculatedSpacingSeconds = spacingRecipients > 1 && windowSeconds > 0
+      ? Math.max(1, Math.floor(windowSeconds / (spacingRecipients - 1)))
+      : randomAverageSeconds;
+    const minimumWindowSeconds = spacingRecipients > 1 ? randomMin * (spacingRecipients - 1) : 0;
+    const maximumWindowSeconds = spacingRecipients > 1 ? randomMax * (spacingRecipients - 1) : 0;
+    const estimatedDurationSeconds = spacingRecipients > 1 ? randomAverageSeconds * (spacingRecipients - 1) : 0;
 
     return {
       recipients,
+      pendingRecipients,
       start,
       end,
       windowSeconds,
       calculatedSpacingSeconds,
       randomMin,
       randomMax,
+      randomAverageSeconds,
       minimumWindowSeconds,
       maximumWindowSeconds,
-      fitsMinimumWindow: windowSeconds === 0 || minimumWindowSeconds <= windowSeconds
+      estimatedDurationSeconds,
+      continuesUntilComplete: !end,
+      fitsMinimumWindow: !end || windowSeconds === 0 || minimumWindowSeconds <= windowSeconds
     };
   }
 
@@ -504,6 +523,27 @@
     if (hours > 0) return `${hours}h ${minutes}m`;
     if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
     return `${remainingSeconds}s`;
+  }
+
+  function delayUnitOptions() {
+    return Object.entries(delayUnits).map(([value, config]) => ({ value, label: config.label, multiplier: config.multiplier }));
+  }
+
+  function normalizeDelayUnit(value) {
+    return Object.prototype.hasOwnProperty.call(delayUnits, value) ? value : "seconds";
+  }
+
+  function delayUnitMultiplier(value) {
+    return delayUnits[normalizeDelayUnit(value)].multiplier;
+  }
+
+  function delayAmountToSeconds(value, unit) {
+    return Math.max(0, Math.round(Number(value || 0) * delayUnitMultiplier(unit)));
+  }
+
+  function delaySecondsToAmount(seconds, unit) {
+    const amount = Math.max(0, Number(seconds || 0)) / delayUnitMultiplier(unit);
+    return Number.isInteger(amount) ? String(amount) : String(Number(amount.toFixed(2)));
   }
 
   function startCampaign(id) {
@@ -653,6 +693,10 @@
     buildRecipientQueue,
     deliveryPlan,
     formatDuration,
+    delayUnitOptions,
+    normalizeDelayUnit,
+    delayAmountToSeconds,
+    delaySecondsToAmount,
     startCampaign,
     updateCampaignStatusAsync,
     manualSendOne,

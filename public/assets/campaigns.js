@@ -84,6 +84,9 @@ function renderCampaigns() {
     const pending = Math.max(Number(campaign.recipients || 0) - Number(campaign.sent || 0) - Number(campaign.failed || 0), 0);
     const plan = store.deliveryPlan(campaign);
     const planClass = plan.fitsMinimumWindow ? "status ready" : "status warning";
+    const planLabel = plan.continuesUntilComplete
+      ? "Continues until complete"
+      : (plan.fitsMinimumWindow ? "Buffer fits window" : "Window too short");
     const progress = Number(campaign.recipients || 0) > 0
       ? Math.round((Number(campaign.sent || 0) / Number(campaign.recipients || 0)) * 100)
       : 0;
@@ -109,11 +112,11 @@ function renderCampaigns() {
           <div><dt>Pending</dt><dd>${pending}</dd></div>
           <div><dt>Failed</dt><dd>${Number(campaign.failed || 0)}</dd></div>
           <div><dt>Send start</dt><dd>${escapeHtml(campaign.windowStartAt || "Not set")}</dd></div>
-          <div><dt>Send end</dt><dd>${escapeHtml(campaign.windowEndAt || "Not set")}</dd></div>
+          <div><dt>Send end</dt><dd>${escapeHtml(campaign.windowEndAt || "Until complete")}</dd></div>
           <div><dt>Spacing</dt><dd>${store.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
           <div><dt>Random buffer</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
         </dl>
-        <span class="${planClass}">${plan.fitsMinimumWindow ? "Buffer fits window" : "Window too short"}</span>
+        <span class="${planClass}">${escapeHtml(planLabel)}</span>
         <div class="table-scroll recipient-preview">
           <table class="data-table compact-preview">
             <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th></tr></thead>
@@ -177,6 +180,14 @@ campaignForm.addEventListener("submit", async (event) => {
   setCampaignLaneStatus("Creating campaign", "pending");
 
   try {
+    const randomDelayUnit = store.normalizeDelayUnit(document.querySelector("#campaignRandomUnit").value);
+    const randomDelayMinSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMin").value, randomDelayUnit);
+    const randomDelayMaxSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMax").value, randomDelayUnit);
+    const windowStartAt = toIsoDateTime(document.querySelector("#campaignStart").value);
+    const windowEndAt = toIsoDateTime(document.querySelector("#campaignEnd").value);
+    const selectedStatus = normalizeCampaignStatusForSchedule(document.querySelector("#campaignStatus").value, windowStartAt);
+    validateScheduleValues(windowStartAt, windowEndAt, randomDelayMinSeconds, randomDelayMaxSeconds);
+
     const templateAssignment = createTemplateAssignmentForNewCampaign(name);
     const created = store.createCampaign({
       name,
@@ -184,13 +195,14 @@ campaignForm.addEventListener("submit", async (event) => {
       templateSource: templateAssignment.templateSource,
       templateFileName: templateAssignment.templateFileName,
       campaignTemplateName: templateAssignment.campaignTemplateName,
-      status: document.querySelector("#campaignStatus").value,
-      scheduledAt: toIsoDateTime(document.querySelector("#campaignStart").value),
-      windowStartAt: toIsoDateTime(document.querySelector("#campaignStart").value),
-      windowEndAt: toIsoDateTime(document.querySelector("#campaignEnd").value),
-      randomDelayMinSeconds: Number(document.querySelector("#campaignRandomMin").value || 0),
-      randomDelayMaxSeconds: Number(document.querySelector("#campaignRandomMax").value || 0),
-      throttleSeconds: Number(document.querySelector("#campaignRandomMin").value || 60),
+      status: selectedStatus,
+      scheduledAt: windowStartAt,
+      windowStartAt,
+      windowEndAt,
+      randomDelayUnit,
+      randomDelayMinSeconds,
+      randomDelayMaxSeconds,
+      throttleSeconds: randomDelayMinSeconds || 60,
       smtpProfile: document.querySelector("#campaignSmtp").value.trim() || "Institution SMTP",
       emailSubject: document.querySelector("#campaignEmailSubject").value.trim() || "Your certificate is ready",
       emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
@@ -365,7 +377,7 @@ campaignList.addEventListener("change", async (event) => {
   }
 });
 
-["campaignStart", "campaignEnd", "campaignRandomMin", "campaignRandomMax"].forEach((id) => {
+["campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("input", renderPlanPreview);
 });
 
@@ -389,14 +401,18 @@ async function initializeCampaigns() {
 
 function renderPlanPreview() {
   const recipientCount = lastCampaignImport?.records.length || 0;
+  const randomDelayUnit = store.normalizeDelayUnit(document.querySelector("#campaignRandomUnit").value);
+  const randomDelayMinSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMin").value, randomDelayUnit);
+  const randomDelayMaxSeconds = store.delayAmountToSeconds(document.querySelector("#campaignRandomMax").value, randomDelayUnit);
   const previewCampaign = {
     recipients: recipientCount,
     failed: 0,
     windowStartAt: document.querySelector("#campaignStart").value,
     windowEndAt: document.querySelector("#campaignEnd").value,
-    randomDelayMinSeconds: Number(document.querySelector("#campaignRandomMin").value || 0),
-    randomDelayMaxSeconds: Number(document.querySelector("#campaignRandomMax").value || 0),
-    throttleSeconds: 60
+    randomDelayUnit,
+    randomDelayMinSeconds,
+    randomDelayMaxSeconds,
+    throttleSeconds: randomDelayMinSeconds || 60
   };
   const plan = store.deliveryPlan(previewCampaign);
 
@@ -406,14 +422,41 @@ function renderPlanPreview() {
     return;
   }
 
-  if (!previewCampaign.windowStartAt || !previewCampaign.windowEndAt) {
-    campaignPlanPreview.textContent = `${recipientCount} recipients loaded. Set start and end times to calculate the average interval.`;
+  if (!previewCampaign.windowStartAt) {
+    campaignPlanPreview.textContent = `${recipientCount} recipients loaded. Set a start time to schedule delivery.`;
     campaignPlanPreview.className = "plan-preview";
+    return;
+  }
+
+  if (plan.continuesUntilComplete) {
+    campaignPlanPreview.textContent = `For ${recipientCount} recipients: starts ${shortTime(previewCampaign.windowStartAt)}, continues until complete, randomized ${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)} between emails. Estimated run time ${store.formatDuration(plan.estimatedDurationSeconds)}.`;
+    campaignPlanPreview.className = "plan-preview ready";
     return;
   }
 
   campaignPlanPreview.textContent = `For ${recipientCount} recipients: ${store.formatDuration(plan.calculatedSpacingSeconds)} average spacing, randomized ${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}.`;
   campaignPlanPreview.className = plan.fitsMinimumWindow ? "plan-preview ready" : "plan-preview warning";
+}
+
+function validateScheduleValues(windowStartAt, windowEndAt, randomDelayMinSeconds, randomDelayMaxSeconds) {
+  if (windowStartAt && windowEndAt && new Date(windowEndAt).getTime() <= new Date(windowStartAt).getTime()) {
+    throw new Error("Send end must be after send start, or leave it blank to continue until complete.");
+  }
+
+  if (randomDelayMaxSeconds < randomDelayMinSeconds) {
+    throw new Error("Random delay max must be greater than or equal to the minimum.");
+  }
+}
+
+function normalizeCampaignStatusForSchedule(status, windowStartAt) {
+  if (status === "running" && windowStartAt) {
+    const startDate = new Date(windowStartAt);
+    if (!Number.isNaN(startDate.getTime()) && startDate.getTime() > Date.now()) {
+      return "scheduled";
+    }
+  }
+
+  return status;
 }
 
 function renderTemplateMode() {
