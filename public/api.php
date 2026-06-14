@@ -156,6 +156,21 @@ try {
         ]);
     }
 
+    if ($action === 'campaign-readiness' && $method === 'POST') {
+        app_require_delivery_access($user);
+        $payload = app_json_payload();
+        $state = app_state();
+        $found = app_find_campaign($state, (string) ($payload['id'] ?? ''));
+        if ($found === null) {
+            throw new RuntimeException('Campaign not found.');
+        }
+
+        app_json_response([
+            'readiness' => app_campaign_readiness($state, $found['campaign']),
+            'csrf' => app_csrf_token(),
+        ]);
+    }
+
     if ($action === 'complete-campaign' && $method === 'POST') {
         app_require_delivery_access($user);
         $payload = app_json_payload();

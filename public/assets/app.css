@@ -750,6 +750,10 @@ code {
     margin-bottom: 14px;
 }
 
+.queue-toolbar {
+    grid-template-columns: minmax(260px, 1fr) 180px 180px;
+}
+
 .panel h2 {
     margin: 0;
     font-size: 18px;
@@ -795,6 +799,57 @@ code {
 .status.warning {
     background: rgba(255, 152, 0, 0.14);
     color: #b06000;
+}
+
+.readiness-panel {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+    padding: 12px;
+    background: #fbfbfb;
+}
+
+.readiness-panel > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.compact-readiness {
+    margin-bottom: 18px;
+}
+
+.readiness-list {
+    display: grid;
+    gap: 8px;
+}
+
+.readiness-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    border-top: 1px solid #eeeeee;
+    padding-top: 8px;
+}
+
+.readiness-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.readiness-item strong,
+.readiness-item small {
+    display: block;
+}
+
+.readiness-item small {
+    margin-top: 2px;
+    color: var(--muted);
+    line-height: 1.4;
 }
 
 .pill.failed,
@@ -1061,7 +1116,7 @@ code {
 
 .campaign-summary-strip {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 8px;
     margin-top: 10px;
 }
@@ -1445,6 +1500,13 @@ code {
     margin-top: 3px;
     color: var(--muted);
     font-size: 13px;
+}
+
+.mini-status-stack {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 .progress-bar {

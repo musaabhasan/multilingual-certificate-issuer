@@ -20,6 +20,7 @@ function renderDashboard() {
   document.querySelector("#dashboardCampaignList").innerHTML = activeCampaigns.map((campaign) => {
     const template = dashboardStore.campaignTemplate(campaign);
     const pending = dashboardStore.campaignCounts(campaign).pending;
+    const readiness = dashboardStore.campaignReadiness(campaign);
 
     return `
       <div class="mini-list-row">
@@ -27,7 +28,10 @@ function renderDashboard() {
           <strong>${escapeHtml(campaign.name)}</strong>
           <span>${escapeHtml(template?.name || "No template")} - ${pending} pending - ${Number(campaign.sent || 0)} sent</span>
         </div>
-        <span class="${dashboardStore.statusClass(campaign.status)}">${dashboardStore.statusLabel(campaign.status)}</span>
+        <div class="mini-status-stack">
+          <span class="${dashboardStore.statusClass(campaign.status)}">${dashboardStore.statusLabel(campaign.status)}</span>
+          <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+        </div>
       </div>
     `;
   }).join("") || "<p>No active campaigns yet.</p>";
@@ -84,9 +88,20 @@ function renderAttention(summary, campaigns, settings) {
       && end.getTime() < Date.now()
       && counts.pending > 0;
   });
+  const blockedCampaigns = campaigns.filter((campaign) => !dashboardStore.campaignReadiness(campaign).ready);
+  const reviewCampaigns = campaigns.filter((campaign) => {
+    const readiness = dashboardStore.campaignReadiness(campaign);
+    return readiness.ready && Number(readiness.summary.warn || 0) > 0;
+  });
 
   if (!deliveryConfigured(smtp)) {
     items.push(["Delivery settings", "warning", "/admin.php"]);
+  }
+  if (blockedCampaigns.length > 0) {
+    items.push([`${blockedCampaigns.length} campaigns blocked from sending`, "failed", "/campaigns.html"]);
+  }
+  if (reviewCampaigns.length > 0) {
+    items.push([`${reviewCampaigns.length} campaigns need review`, "warning", "/campaigns.html"]);
   }
   if (Number(summary.failed || 0) > 0) {
     items.push([`${summary.failed} failed sends`, "failed", "/queue.html"]);
@@ -121,6 +136,18 @@ function stateLabel(state) {
   if (state === "failed") return "Fix";
   if (state === "warning") return "Review";
   return "Ready";
+}
+
+function readinessLabel(readiness) {
+  if (readiness.ready && Number(readiness.summary.warn || 0) === 0) return "Ready";
+  if (readiness.ready) return "Review";
+  return "Blocked";
+}
+
+function readinessStatusClass(readiness) {
+  if (!readiness.ready) return "status failed";
+  if (Number(readiness.summary.warn || 0) > 0) return "status warning";
+  return "status ready";
 }
 
 function shortTime(value) {

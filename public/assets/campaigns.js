@@ -266,6 +266,55 @@ function campaignSectionState(activeTab, tab) {
   return activeTab === tab ? "" : "hidden";
 }
 
+function readinessLabel(readiness) {
+  if (readiness.ready && Number(readiness.summary.warn || 0) === 0) return "Ready to send";
+  if (readiness.ready) return `${Number(readiness.summary.warn || 0)} review items`;
+  return `${Number(readiness.summary.fail || 0)} blockers`;
+}
+
+function readinessStatusClass(readiness) {
+  if (!readiness.ready) return "status failed";
+  if (Number(readiness.summary.warn || 0) > 0) return "status warning";
+  return "status ready";
+}
+
+function readinessListMarkup(readiness, limit = 6) {
+  const checks = (readiness.checks || [])
+    .filter((check) => check.status !== "pass")
+    .slice(0, limit);
+  const visibleChecks = checks.length > 0 ? checks : (readiness.checks || []).slice(0, Math.min(3, limit));
+
+  return `
+    <div class="readiness-list">
+      ${visibleChecks.map((check) => `
+        <div class="readiness-item ${escapeHtml(check.status)}">
+          <span class="status ${readinessCheckClass(check.status)}">${escapeHtml(readinessCheckLabel(check.status))}</span>
+          <div>
+            <strong>${escapeHtml(check.label)}</strong>
+            <small>${escapeHtml(check.detail)}</small>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function readinessCheckClass(status) {
+  if (status === "fail") return "failed";
+  if (status === "warn") return "warning";
+  return "ready";
+}
+
+function readinessCheckLabel(status) {
+  if (status === "fail") return "Fix";
+  if (status === "warn") return "Review";
+  return "Ready";
+}
+
+function disabledTitle(message) {
+  return `disabled title="${escapeAttribute(message || "Campaign is not ready to send.")}"`;
+}
+
 function renderCampaigns() {
   const allCampaigns = store.campaigns();
   const campaigns = filteredCampaigns(allCampaigns);
@@ -285,6 +334,7 @@ function renderCampaigns() {
     const counts = store.campaignCounts(campaign);
     const pending = counts.pending;
     const plan = store.deliveryPlan(campaign);
+    const readiness = store.campaignReadiness(campaign);
     const planClass = plan.fitsMinimumWindow ? "status ready" : "status warning";
     const planLabel = plan.continuesUntilComplete
       ? "Continues until complete"
@@ -305,6 +355,8 @@ function renderCampaigns() {
     const activeTab = campaignTabs.get(campaign.id) || "overview";
     const primaryAction = campaign.status === "running" ? "paused" : "running";
     const primaryActionLabel = campaign.status === "running" ? "Stop sending" : "Start";
+    const startBlockedAttribute = primaryAction === "running" && !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
+    const sendBlockedAttribute = !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
 
     return `
       <article class="campaign-card ${expanded ? "expanded" : "collapsed"}">
@@ -315,7 +367,8 @@ function renderCampaigns() {
           </div>
           <div class="campaign-header-actions">
             <span class="${store.statusClass(campaign.status)}">${store.statusLabel(campaign.status)}</span>
-            <button type="button" data-action="${primaryAction}" data-id="${escapeHtml(campaign.id)}">${primaryActionLabel}</button>
+            <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+            <button type="button" data-action="${primaryAction}" data-id="${escapeHtml(campaign.id)}" ${startBlockedAttribute}>${primaryActionLabel}</button>
             <button type="button" data-action="toggle-details" data-id="${escapeHtml(campaign.id)}" aria-expanded="${expanded ? "true" : "false"}">${expanded ? "Hide details" : "Open details"}</button>
           </div>
         </div>
@@ -326,6 +379,7 @@ function renderCampaigns() {
           <span><strong>${pending}</strong> pending</span>
           <span><strong>${counts.failed}</strong> failed</span>
           <span>${escapeHtml(campaign.importFileName || "No CSV attached")}</span>
+          <span>${escapeHtml(readinessLabel(readiness))}</span>
           <span>${escapeHtml(planLabel)}</span>
         </div>
         <div class="campaign-details" ${expanded ? "" : "hidden"}>
@@ -353,11 +407,18 @@ function renderCampaigns() {
               <div><dt>Spacing</dt><dd>${store.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
               <div><dt>Random buffer</dt><dd>${store.formatDuration(plan.randomMin)}-${store.formatDuration(plan.randomMax)}</dd></div>
             </dl>
+            <div class="readiness-panel">
+              <div>
+                <strong>Readiness</strong>
+                <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+              </div>
+              ${readinessListMarkup(readiness, 7)}
+            </div>
             <div class="campaign-command-bar">
               <span class="${planClass}">${escapeHtml(planLabel)}</span>
-              <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
+              <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}" ${!readiness.ready ? disabledTitle(readiness.blockingMessage) : ""}>Start</button>
               <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
-              <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+              <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}" ${sendBlockedAttribute}>Send one now</button>
               <a class="button" href="/queue.html">Queue details</a>
             </div>
             <div class="campaign-assets">

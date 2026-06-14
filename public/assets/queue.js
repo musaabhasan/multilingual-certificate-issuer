@@ -4,6 +4,9 @@ const queueWorkerStatus = document.querySelector("#queueWorkerStatus");
 const processDueQueue = document.querySelector("#processDueQueue");
 const refreshQueue = document.querySelector("#refreshQueue");
 const toggleAutoQueue = document.querySelector("#toggleAutoQueue");
+const queueSearch = document.querySelector("#queueSearch");
+const queueStatusFilter = document.querySelector("#queueStatusFilter");
+const queueReadinessFilter = document.querySelector("#queueReadinessFilter");
 let queueRefreshInFlight = false;
 let queueActionInFlight = false;
 let queueWorkerInFlight = false;
@@ -12,10 +15,11 @@ const queueRecipientFilters = new Map();
 
 function renderQueue() {
   const summary = queueStore.summary();
-  const campaigns = queueStore.campaigns();
-  const deliverableCampaigns = campaigns.filter((campaign) => ["scheduled", "running"].includes(campaign.status) && !isWindowExpired(campaign));
+  const allCampaigns = queueStore.campaigns();
+  const campaigns = filteredQueueCampaigns(allCampaigns);
+  const deliverableCampaigns = allCampaigns.filter((campaign) => ["scheduled", "running"].includes(campaign.status) && !isWindowExpired(campaign) && queueStore.campaignReadiness(campaign).ready);
   const expiredCampaigns = campaigns.filter((campaign) => ["scheduled", "running"].includes(campaign.status) && isWindowExpired(campaign));
-  const activePlans = campaigns
+  const activePlans = allCampaigns
     .filter((campaign) => ["scheduled", "running"].includes(campaign.status))
     .map((campaign) => queueStore.deliveryPlan(campaign));
   const slowestSpacing = activePlans.reduce((max, plan) => Math.max(max, plan.calculatedSpacingSeconds), 0);
@@ -26,11 +30,13 @@ function renderQueue() {
   document.querySelector("#queueSpacing").textContent = queueStore.formatDuration(slowestSpacing);
   queueWorkerStatus.textContent = expiredCampaigns.length > 0
     ? `${deliverableCampaigns.length} active lanes, ${expiredCampaigns.length} ended windows`
-    : `${deliverableCampaigns.length} active lanes`;
+    : `${deliverableCampaigns.length} active lanes, ${campaigns.length} shown`;
   queueWorkerStatus.className = expiredCampaigns.length > 0 ? "status warning" : "status ready";
   renderSmtpProfile();
 
-  queueCampaignList.innerHTML = campaigns.map((campaign) => renderCampaignQueue(campaign)).join("");
+  queueCampaignList.innerHTML = campaigns.length > 0
+    ? campaigns.map((campaign) => renderCampaignQueue(campaign)).join("")
+    : '<div class="empty-state">No queue lanes match the current filters.</div>';
 }
 
 function setQueueStatus(text, state = "ready") {
@@ -66,6 +72,7 @@ function renderCampaignQueue(campaign) {
   const plan = queueStore.deliveryPlan(campaign);
   const recipients = Number(campaign.recipients || 0);
   const counts = queueStore.campaignCounts(campaign);
+  const readiness = queueStore.campaignReadiness(campaign);
   const sent = counts.sent;
   const failed = counts.failed;
   const skipped = counts.skipped;
@@ -87,6 +94,8 @@ function renderCampaignQueue(campaign) {
   const randomUnit = queueStore.normalizeDelayUnit(campaign.randomDelayUnit);
   const randomMinAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMinSeconds, randomUnit);
   const randomMaxAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
+  const startDisabled = !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
+  const sendDisabled = !readiness.ready ? disabledTitle(readiness.blockingMessage) : "";
 
   return `
     <article class="campaign-card">
@@ -95,7 +104,10 @@ function renderCampaignQueue(campaign) {
           <h3>${escapeHtml(campaign.name)}</h3>
           <p>${escapeHtml(template?.name || "No template")}</p>
         </div>
-        <span class="${queueStore.statusClass(campaign.status)}">${queueStore.statusLabel(campaign.status)}</span>
+        <div class="campaign-header-actions">
+          <span class="${queueStore.statusClass(campaign.status)}">${queueStore.statusLabel(campaign.status)}</span>
+          <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+        </div>
       </div>
       <div class="progress-bar" aria-label="Campaign progress"><span style="width: ${progress}%"></span></div>
       <dl class="detail-list compact-details">
@@ -114,6 +126,13 @@ function renderCampaignQueue(campaign) {
         <div><dt>Attachment</dt><dd><span class="pill sent">certificate.pdf</span></dd></div>
       </dl>
       <span class="${planClass}">${escapeHtml(planLabel)}</span>
+      <div class="readiness-panel compact-readiness">
+        <div>
+          <strong>Queue readiness</strong>
+          <span class="${readinessStatusClass(readiness)}">${escapeHtml(readinessLabel(readiness))}</span>
+        </div>
+        ${readinessListMarkup(readiness, 5)}
+      </div>
       <div class="campaign-assets">
         <h4>Schedule and buffer</h4>
         <div class="asset-grid">
@@ -169,9 +188,9 @@ function renderCampaignQueue(campaign) {
         ${events.map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No sends recorded yet.</span></div>"}
       </div>
       <div class="action-row">
-        <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">${expired && pending > 0 ? "Restart window" : "Start"}</button>
+        <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}" ${startDisabled}>${expired && pending > 0 ? "Restart window" : "Start"}</button>
         <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
-        <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+        <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}" ${sendDisabled}>Send one now</button>
         <button type="button" data-action="restart-campaign" data-id="${escapeHtml(campaign.id)}">Restart campaign</button>
         <button type="button" data-action="reuse-campaign" data-id="${escapeHtml(campaign.id)}">Reuse with recipients</button>
         <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
@@ -242,6 +261,7 @@ function hasAutoQueueWork() {
   return queueStore.campaigns().some((campaign) => {
     if (!["scheduled", "running"].includes(campaign.status)) return false;
     if (isWindowExpired(campaign)) return false;
+    if (!queueStore.campaignReadiness(campaign).ready) return false;
 
     return queueStore.campaignCounts(campaign).pending > 0;
   });
@@ -354,6 +374,13 @@ toggleAutoQueue.addEventListener("click", () => {
   }
 });
 
+[queueSearch, queueStatusFilter, queueReadinessFilter].forEach((control) => {
+  control?.addEventListener("input", () => {
+    renderQueue();
+    setQueueStatus("Queue filters updated", "ready");
+  });
+});
+
 function nextSendLabel(campaign, plan) {
   if (campaign.status === "completed") return "Done";
   if (campaign.status === "paused") return "Paused";
@@ -371,6 +398,88 @@ function nextSendLabel(campaign, plan) {
 function windowLabel(campaign) {
   if (!campaign.windowStartAt && !campaign.windowEndAt) return "Not set";
   return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "completion"}`;
+}
+
+function filteredQueueCampaigns(campaigns) {
+  const query = String(queueSearch?.value || "").trim().toLowerCase();
+  const status = queueStatusFilter?.value || "all";
+  const readinessFilter = queueReadinessFilter?.value || "all";
+
+  return campaigns.filter((campaign) => {
+    const readiness = queueStore.campaignReadiness(campaign);
+    const statusMatch = status === "all"
+      || campaign.status === status
+      || (status === "active" && ["scheduled", "running", "paused"].includes(campaign.status));
+    const readinessMatch = readinessFilter === "all"
+      || (readinessFilter === "ready" && readiness.ready && Number(readiness.summary.warn || 0) === 0)
+      || (readinessFilter === "review" && readiness.ready && Number(readiness.summary.warn || 0) > 0)
+      || (readinessFilter === "blocked" && !readiness.ready);
+    const template = queueStore.campaignTemplate(campaign);
+    const recipientValues = (campaign.recipientQueue || []).slice(0, 30).flatMap((recipient) => [
+      recipient.displayName,
+      recipient.email,
+      recipient.identifier
+    ]);
+    const haystack = [
+      campaign.name,
+      campaign.importFileName,
+      campaign.emailSubject,
+      template?.name,
+      ...(campaign.labels || []),
+      ...recipientValues
+    ].join(" ").toLowerCase();
+
+    return statusMatch && readinessMatch && (!query || haystack.includes(query));
+  });
+}
+
+function readinessLabel(readiness) {
+  if (readiness.ready && Number(readiness.summary.warn || 0) === 0) return "Ready to send";
+  if (readiness.ready) return `${Number(readiness.summary.warn || 0)} review items`;
+  return `${Number(readiness.summary.fail || 0)} blockers`;
+}
+
+function readinessStatusClass(readiness) {
+  if (!readiness.ready) return "status failed";
+  if (Number(readiness.summary.warn || 0) > 0) return "status warning";
+  return "status ready";
+}
+
+function readinessListMarkup(readiness, limit = 5) {
+  const checks = (readiness.checks || [])
+    .filter((check) => check.status !== "pass")
+    .slice(0, limit);
+  const visibleChecks = checks.length > 0 ? checks : (readiness.checks || []).slice(0, Math.min(3, limit));
+
+  return `
+    <div class="readiness-list">
+      ${visibleChecks.map((check) => `
+        <div class="readiness-item ${escapeHtml(check.status)}">
+          <span class="status ${readinessCheckClass(check.status)}">${escapeHtml(readinessCheckLabel(check.status))}</span>
+          <div>
+            <strong>${escapeHtml(check.label)}</strong>
+            <small>${escapeHtml(check.detail)}</small>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function readinessCheckClass(status) {
+  if (status === "fail") return "failed";
+  if (status === "warn") return "warning";
+  return "ready";
+}
+
+function readinessCheckLabel(status) {
+  if (status === "fail") return "Fix";
+  if (status === "warn") return "Review";
+  return "Ready";
+}
+
+function disabledTitle(message) {
+  return `disabled title="${escapeAttribute(message || "Campaign is not ready to send.")}"`;
 }
 
 function filterRecipients(recipients, query) {

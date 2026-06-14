@@ -681,6 +681,193 @@
     };
   }
 
+  function campaignReadiness(campaign) {
+    const normalized = normalizeCampaign(campaign || {});
+    const template = campaignTemplate(normalized);
+    const counts = campaignCounts(normalized);
+    const labels = (normalized.labels || []).map((label) => String(label || "").trim().toLowerCase());
+    const smtp = settings().smtp || {};
+    const deliveryMode = smtp.deliveryMode || "log";
+    const checks = [];
+
+    checks.push(readinessCheck(
+      "template",
+      "Certificate template",
+      template ? "pass" : "fail",
+      template ? (template.name || "Template selected.") : "Select or upload a certificate template."
+    ));
+
+    const elements = Array.isArray(template?.layout?.elements) ? template.layout.elements : [];
+    checks.push(readinessCheck(
+      "template_items",
+      "Certificate fields",
+      template && elements.length > 0 ? "pass" : "warn",
+      template && elements.length > 0
+        ? `${elements.length} certificate items are positioned.`
+        : "The template has no positioned text, image, or QR items yet."
+    ));
+
+    checks.push(readinessCheck(
+      "recipient_queue",
+      "Recipient CSV",
+      counts.recipients > 0 ? "pass" : "fail",
+      counts.recipients > 0 ? `${counts.recipients} recipients imported.` : "Upload a CSV file for this campaign."
+    ));
+    checks.push(readinessCheck(
+      "pending_recipients",
+      "Queued recipients",
+      counts.pending > 0 ? "pass" : "fail",
+      counts.pending > 0 ? `${counts.pending} recipients are ready to send.` : "There are no queued recipients left to send."
+    ));
+
+    [
+      ["unique_identifier", "Unique identifier", "warn"],
+      ["email", "Email", "fail"],
+      ["name_en", "English name", "warn"]
+    ].forEach(([key, label, missingStatus]) => {
+      const present = labels.includes(key);
+      checks.push(readinessCheck(
+        `label_${key}`,
+        `${label} label`,
+        present ? "pass" : missingStatus,
+        present ? `${key} is mapped from the campaign CSV.` : `Add a ${key} column to the campaign CSV.`
+      ));
+    });
+
+    const invalidEmails = (normalized.recipientQueue || [])
+      .filter((recipient) => !terminalRecipientStatuses.includes(recipient.status || "queued"))
+      .filter((recipient) => !isValidEmail(recipient.email || recipient.data?.email || ""))
+      .length;
+    checks.push(readinessCheck(
+      "recipient_emails",
+      "Recipient email addresses",
+      invalidEmails === 0 ? "pass" : (deliveryMode === "log" ? "warn" : "fail"),
+      invalidEmails === 0
+        ? "Queued recipients have usable email addresses."
+        : `${invalidEmails} queued recipients need a valid email address.`
+    ));
+
+    const emailBodyText = stripHtml(normalized.emailBodyHtml).trim();
+    checks.push(readinessCheck(
+      "email_subject",
+      "Email subject",
+      String(normalized.emailSubject || "").trim() ? "pass" : "fail",
+      String(normalized.emailSubject || "").trim() ? "Subject is configured." : "Add a subject before sending."
+    ));
+    checks.push(readinessCheck(
+      "email_body",
+      "Email body",
+      emailBodyText ? "pass" : "fail",
+      emailBodyText ? "Body content is configured." : "Add email body content before sending."
+    ));
+    checks.push(readinessCheck(
+      "verification_link",
+      "Verification link",
+      String(normalized.emailBodyHtml || "").includes("verification_url") ? "pass" : "warn",
+      String(normalized.emailBodyHtml || "").includes("verification_url")
+        ? "The message includes the certificate verification link."
+        : "The sending engine will append a verification link, but it is better to place it in the message body."
+    ));
+
+    const plan = deliveryPlan(normalized);
+    checks.push(readinessCheck(
+      "send_buffer",
+      "Send buffer",
+      plan.randomMax >= plan.randomMin ? "pass" : "fail",
+      plan.randomMax >= plan.randomMin ? "Random delay range is valid." : "Maximum random delay must be greater than or equal to the minimum."
+    ));
+    if (plan.start && plan.end) {
+      checks.push(readinessCheck(
+        "delivery_window",
+        "Delivery window",
+        plan.end > plan.start ? "pass" : "fail",
+        plan.end > plan.start ? "End time is after the start time." : "End time must be after the start time, or leave it blank."
+      ));
+      checks.push(readinessCheck(
+        "window_capacity",
+        "Window capacity",
+        plan.fitsMinimumWindow ? "pass" : "warn",
+        plan.fitsMinimumWindow
+          ? "The selected window can fit the minimum send buffer."
+          : "The delivery window is shorter than the minimum buffer; leave the end time blank or extend the window."
+      ));
+    } else {
+      checks.push(readinessCheck(
+        "delivery_window",
+        "Delivery window",
+        "pass",
+        plan.end ? "Start time will be set when the campaign starts." : "Open-ended delivery will continue until the queue is complete."
+      ));
+    }
+
+    checks.push(...deliveryReadinessChecks(smtp));
+    const summary = summarizeReadiness(checks);
+
+    return {
+      ready: summary.fail === 0,
+      summary,
+      checks,
+      blockingMessage: readinessFailureMessage(checks)
+    };
+  }
+
+  function readinessCheck(key, label, status, detail) {
+    return {
+      key,
+      label,
+      status: ["pass", "warn", "fail"].includes(status) ? status : "warn",
+      detail
+    };
+  }
+
+  function summarizeReadiness(checks) {
+    return checks.reduce((summary, check) => {
+      const status = ["pass", "warn", "fail"].includes(check.status) ? check.status : "warn";
+      summary[status] += 1;
+      return summary;
+    }, { pass: 0, warn: 0, fail: 0 });
+  }
+
+  function readinessFailureMessage(checks) {
+    const failures = checks.filter((check) => check.status === "fail").slice(0, 3).map((check) => check.label);
+    return failures.length > 0 ? `Campaign is not ready to send: ${failures.join(", ")}.` : "";
+  }
+
+  function deliveryReadinessChecks(smtp) {
+    const mode = smtp.deliveryMode || "log";
+    if (mode === "graph") {
+      return [
+        readinessCheck("delivery_mode", "Delivery mode", "pass", "Microsoft Graph delivery is selected."),
+        readinessCheck("graph_tenant", "Graph tenant", smtp.graphTenantId ? "pass" : "fail", smtp.graphTenantId ? "Tenant is configured." : "Set the tenant ID or tenant domain."),
+        readinessCheck("graph_client", "Graph client ID", smtp.graphClientId ? "pass" : "fail", smtp.graphClientId ? "Client ID is configured." : "Set the application client ID."),
+        readinessCheck("graph_secret", "Graph client secret", smtp.hasGraphClientSecret ? "pass" : "fail", smtp.hasGraphClientSecret ? "Encrypted client secret is saved." : "Set and save a client secret."),
+        readinessCheck("graph_sender", "Graph sender mailbox", isValidEmail(smtp.graphSender || "") ? "pass" : "fail", isValidEmail(smtp.graphSender || "") ? "Sender mailbox is valid." : "Set a valid sender mailbox.")
+      ];
+    }
+
+    if (mode === "smtp") {
+      return [
+        readinessCheck("delivery_mode", "Delivery mode", "pass", "SMTP delivery is selected."),
+        readinessCheck("smtp_host", "SMTP host", smtp.host ? "pass" : "fail", smtp.host || "Set the SMTP host."),
+        readinessCheck("smtp_username", "SMTP username", smtp.username ? "pass" : "fail", smtp.username ? "Username is configured." : "Set the SMTP username."),
+        readinessCheck("smtp_password", "SMTP password", smtp.hasPassword ? "pass" : "fail", smtp.hasPassword ? "Encrypted password is saved." : "Set and save the SMTP password."),
+        readinessCheck("smtp_from", "From address", isValidEmail(smtp.fromAddress || "") ? "pass" : "fail", isValidEmail(smtp.fromAddress || "") ? "Sender address is valid." : "Set a valid From address.")
+      ];
+    }
+
+    return [
+      readinessCheck("delivery_mode", "Delivery mode", "warn", "Local log mode is active. Certificates will render, but emails will not be delivered to recipients.")
+    ];
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  }
+
+  function stripHtml(value) {
+    return String(value || "").replace(/<[^>]*>/g, " ");
+  }
+
   function parseLocalDateTime(value) {
     if (!value) return null;
     const date = new Date(value);
@@ -929,6 +1116,7 @@
     reuseCampaign,
     buildRecipientQueue,
     deliveryPlan,
+    campaignReadiness,
     formatDuration,
     delayUnitOptions,
     normalizeDelayUnit,

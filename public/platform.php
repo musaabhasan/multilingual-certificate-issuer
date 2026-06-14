@@ -1126,6 +1126,219 @@ function app_recommended_window_seconds(array $campaign, int $pendingRecipients)
     return max(300, $maximum * ($pendingRecipients - 1) + 120);
 }
 
+function app_campaign_readiness(array $state, array $campaign): array
+{
+    $template = app_campaign_template($state, $campaign);
+    $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
+    $counts = app_recipient_status_counts($queue);
+    $pending = app_pending_recipient_count($queue);
+    $labels = array_map(static fn (mixed $label): string => strtolower(trim((string) $label)), is_array($campaign['labels'] ?? null) ? $campaign['labels'] : []);
+    $settings = app_settings();
+    $checks = [];
+
+    $checks[] = app_readiness_check(
+        'template',
+        'Certificate template',
+        $template !== null ? 'pass' : 'fail',
+        $template !== null ? (string) ($template['name'] ?? 'Template selected.') : 'Select or upload a certificate template.'
+    );
+
+    $elements = is_array($template['layout']['elements'] ?? null) ? $template['layout']['elements'] : [];
+    $checks[] = app_readiness_check(
+        'template_items',
+        'Certificate fields',
+        $template !== null && count($elements) > 0 ? 'pass' : 'warn',
+        $template !== null && count($elements) > 0
+            ? count($elements) . ' certificate items are positioned.'
+            : 'The template has no positioned text, image, or QR items yet.'
+    );
+
+    $checks[] = app_readiness_check(
+        'recipient_queue',
+        'Recipient CSV',
+        $counts['recipients'] > 0 ? 'pass' : 'fail',
+        $counts['recipients'] > 0 ? $counts['recipients'] . ' recipients imported.' : 'Upload a CSV file for this campaign.'
+    );
+    $checks[] = app_readiness_check(
+        'pending_recipients',
+        'Queued recipients',
+        $pending > 0 ? 'pass' : 'fail',
+        $pending > 0 ? $pending . ' recipients are ready to send.' : 'There are no queued recipients left to send.'
+    );
+
+    foreach (['unique_identifier' => 'Unique identifier', 'email' => 'Email', 'name_en' => 'English name'] as $required => $label) {
+        $status = in_array($required, $labels, true) ? 'pass' : ($required === 'email' ? 'fail' : 'warn');
+        $checks[] = app_readiness_check(
+            'label_' . $required,
+            $label . ' label',
+            $status,
+            $status === 'pass' ? $required . ' is mapped from the campaign CSV.' : 'Add a ' . $required . ' column to the campaign CSV.'
+        );
+    }
+
+    $invalidEmails = 0;
+    foreach ($queue as $recipient) {
+        if (in_array(($recipient['status'] ?? 'queued'), ['sent', 'failed', 'skipped'], true)) {
+            continue;
+        }
+
+        $data = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];
+        $email = trim((string) ($recipient['email'] ?? $data['email'] ?? ''));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $invalidEmails += 1;
+        }
+    }
+    $deliveryMode = (string) ($settings['smtp']['deliveryMode'] ?? 'log');
+    $checks[] = app_readiness_check(
+        'recipient_emails',
+        'Recipient email addresses',
+        $invalidEmails === 0 ? 'pass' : ($deliveryMode === 'log' ? 'warn' : 'fail'),
+        $invalidEmails === 0
+            ? 'Queued recipients have usable email addresses.'
+            : $invalidEmails . ' queued recipients need a valid email address.'
+    );
+
+    $subject = trim((string) ($campaign['emailSubject'] ?? ''));
+    $body = trim(strip_tags((string) ($campaign['emailBodyHtml'] ?? '')));
+    $rawBody = (string) ($campaign['emailBodyHtml'] ?? '');
+    $checks[] = app_readiness_check(
+        'email_subject',
+        'Email subject',
+        $subject !== '' ? 'pass' : 'fail',
+        $subject !== '' ? 'Subject is configured.' : 'Add a subject before sending.'
+    );
+    $checks[] = app_readiness_check(
+        'email_body',
+        'Email body',
+        $body !== '' ? 'pass' : 'fail',
+        $body !== '' ? 'Body content is configured.' : 'Add email body content before sending.'
+    );
+    $checks[] = app_readiness_check(
+        'verification_link',
+        'Verification link',
+        str_contains($rawBody, 'verification_url') ? 'pass' : 'warn',
+        str_contains($rawBody, 'verification_url')
+            ? 'The message includes the certificate verification link.'
+            : 'The sending engine will append a verification link, but it is better to place it in the message body.'
+    );
+
+    $randomMin = max(0, (int) ($campaign['randomDelayMinSeconds'] ?? $campaign['throttleSeconds'] ?? 60));
+    $randomMax = max(0, (int) ($campaign['randomDelayMaxSeconds'] ?? $randomMin));
+    $startAt = app_time_or_null((string) ($campaign['windowStartAt'] ?? $campaign['scheduledAt'] ?? ''));
+    $endAt = app_time_or_null((string) ($campaign['windowEndAt'] ?? ''));
+    $checks[] = app_readiness_check(
+        'send_buffer',
+        'Send buffer',
+        $randomMax >= $randomMin ? 'pass' : 'fail',
+        $randomMax >= $randomMin ? 'Random delay range is valid.' : 'Maximum random delay must be greater than or equal to the minimum.'
+    );
+    if ($startAt !== null && $endAt !== null) {
+        $checks[] = app_readiness_check(
+            'delivery_window',
+            'Delivery window',
+            $endAt > $startAt ? 'pass' : 'fail',
+            $endAt > $startAt ? 'End time is after the start time.' : 'End time must be after the start time, or leave it blank.'
+        );
+
+        $minimumWindow = $pending > 1 ? $randomMin * ($pending - 1) : 0;
+        $windowSeconds = max(0, $endAt - $startAt);
+        $checks[] = app_readiness_check(
+            'window_capacity',
+            'Window capacity',
+            $minimumWindow <= $windowSeconds ? 'pass' : 'warn',
+            $minimumWindow <= $windowSeconds
+                ? 'The selected window can fit the minimum send buffer.'
+                : 'The delivery window is shorter than the minimum buffer; leave the end time blank or extend the window.'
+        );
+    } else {
+        $checks[] = app_readiness_check(
+            'delivery_window',
+            'Delivery window',
+            'pass',
+            $endAt === null ? 'Open-ended delivery will continue until the queue is complete.' : 'Start time will be set when the campaign starts.'
+        );
+    }
+
+    $checks = array_merge($checks, app_campaign_delivery_readiness_checks($settings));
+    $summary = app_readiness_summary($checks);
+
+    return [
+        'ready' => $summary['fail'] === 0,
+        'summary' => $summary,
+        'checks' => $checks,
+    ];
+}
+
+function app_readiness_check(string $key, string $label, string $status, string $detail): array
+{
+    return [
+        'key' => $key,
+        'label' => $label,
+        'status' => in_array($status, ['pass', 'warn', 'fail'], true) ? $status : 'warn',
+        'detail' => $detail,
+    ];
+}
+
+function app_readiness_summary(array $checks): array
+{
+    $summary = ['pass' => 0, 'warn' => 0, 'fail' => 0];
+    foreach ($checks as $check) {
+        $status = (string) ($check['status'] ?? 'warn');
+        if (!array_key_exists($status, $summary)) {
+            $status = 'warn';
+        }
+        $summary[$status] += 1;
+    }
+
+    return $summary;
+}
+
+function app_readiness_failure_message(array $readiness): string
+{
+    $failures = array_values(array_filter(
+        $readiness['checks'] ?? [],
+        static fn (array $check): bool => ($check['status'] ?? '') === 'fail'
+    ));
+    $details = array_map(
+        static fn (array $check): string => (string) ($check['label'] ?? 'Readiness check'),
+        array_slice($failures, 0, 3)
+    );
+
+    return 'Campaign is not ready to send: ' . implode(', ', $details) . '.';
+}
+
+function app_campaign_delivery_readiness_checks(array $settings): array
+{
+    $smtp = $settings['smtp'];
+    $mode = (string) ($smtp['deliveryMode'] ?? 'log');
+    if ($mode === 'graph') {
+        return [
+            app_readiness_check('delivery_mode', 'Delivery mode', 'pass', 'Microsoft Graph delivery is selected.'),
+            app_readiness_check('graph_curl', 'Graph cURL support', extension_loaded('curl') ? 'pass' : 'fail', extension_loaded('curl') ? 'cURL is available.' : 'Enable the PHP cURL extension.'),
+            app_readiness_check('graph_tenant', 'Graph tenant', trim((string) ($smtp['graphTenantId'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['graphTenantId'] ?? '')) !== '' ? 'Tenant is configured.' : 'Set the tenant ID or tenant domain.'),
+            app_readiness_check('graph_client', 'Graph client ID', trim((string) ($smtp['graphClientId'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['graphClientId'] ?? '')) !== '' ? 'Client ID is configured.' : 'Set the application client ID.'),
+            app_readiness_check('graph_secret', 'Graph client secret', trim((string) ($smtp['encryptedGraphClientSecret'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['encryptedGraphClientSecret'] ?? '')) !== '' ? 'Encrypted client secret is saved.' : 'Set and save a client secret.'),
+            app_readiness_check('graph_sender', 'Graph sender mailbox', filter_var((string) ($smtp['graphSender'] ?? ''), FILTER_VALIDATE_EMAIL) ? 'pass' : 'fail', filter_var((string) ($smtp['graphSender'] ?? ''), FILTER_VALIDATE_EMAIL) ? 'Sender mailbox is valid.' : 'Set a valid sender mailbox.'),
+        ];
+    }
+
+    if ($mode === 'smtp') {
+        return [
+            app_readiness_check('delivery_mode', 'Delivery mode', 'pass', 'SMTP delivery is selected.'),
+            app_readiness_check('phpmailer', 'PHPMailer library', class_exists(PHPMailer::class) ? 'pass' : 'fail', class_exists(PHPMailer::class) ? 'PHPMailer is available.' : 'Run composer install before SMTP delivery.'),
+            app_readiness_check('openssl', 'OpenSSL support', extension_loaded('openssl') ? 'pass' : 'fail', extension_loaded('openssl') ? 'OpenSSL is available for encrypted SMTP.' : 'Enable the PHP OpenSSL extension.'),
+            app_readiness_check('smtp_host', 'SMTP host', trim((string) ($smtp['host'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['host'] ?? '')) !== '' ? (string) ($smtp['host'] ?? '') : 'Set the SMTP host.'),
+            app_readiness_check('smtp_username', 'SMTP username', trim((string) ($smtp['username'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['username'] ?? '')) !== '' ? 'Username is configured.' : 'Set the SMTP username.'),
+            app_readiness_check('smtp_password', 'SMTP password', trim((string) ($smtp['encryptedPassword'] ?? '')) !== '' ? 'pass' : 'fail', trim((string) ($smtp['encryptedPassword'] ?? '')) !== '' ? 'Encrypted password is saved.' : 'Set and save the SMTP password.'),
+            app_readiness_check('smtp_from', 'From address', filter_var((string) ($smtp['fromAddress'] ?? ''), FILTER_VALIDATE_EMAIL) ? 'pass' : 'fail', filter_var((string) ($smtp['fromAddress'] ?? ''), FILTER_VALIDATE_EMAIL) ? 'Sender address is valid.' : 'Set a valid From address.'),
+        ];
+    }
+
+    return [
+        app_readiness_check('delivery_mode', 'Delivery mode', 'warn', 'Local log mode is active. Certificates will render, but emails will not be delivered to recipients.'),
+    ];
+}
+
 function app_update_campaign_status(string $campaignId, string $status): array
 {
     $status = strtolower(trim($status));
@@ -1173,6 +1386,11 @@ function app_update_campaign_status(string $campaignId, string $status): array
             $campaign['nextSendAfterAt'] = '';
             $eventMessage = 'Campaign restarted with an open delivery window because the previous window had ended.';
         }
+
+        $readiness = app_campaign_readiness($state, $campaign);
+        if (!$readiness['ready']) {
+            throw new RuntimeException(app_readiness_failure_message($readiness));
+        }
     }
 
     if ($status === 'running' && trim((string) ($campaign['windowStartAt'] ?? '')) === '') {
@@ -1210,11 +1428,12 @@ function app_send_one(string $campaignId): array
     }
 
     $campaign = $found['campaign'];
-    $template = app_campaign_template($state, $campaign);
-    if ($template === null) {
-        throw new RuntimeException('Campaign template not found.');
+    $readiness = app_campaign_readiness($state, $campaign);
+    if (!$readiness['ready']) {
+        throw new RuntimeException(app_readiness_failure_message($readiness));
     }
 
+    $template = app_campaign_template($state, $campaign);
     $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
     foreach ($queue as $recipientIndex => $recipient) {
         if (in_array(($recipient['status'] ?? 'queued'), ['sent', 'failed', 'skipped'], true)) {
@@ -1350,6 +1569,20 @@ function app_dispatch_due_campaigns(): array
         if ($changed) {
             app_save_state($state);
             $changed = false;
+        }
+
+        $readiness = app_campaign_readiness($state, $campaign);
+        if (!$readiness['ready']) {
+            $campaign['status'] = 'paused';
+            $campaign['updatedAt'] = app_now();
+            $campaign['deliveryEvents'] = array_slice([
+                ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
+                ['at' => app_now(), 'message' => app_readiness_failure_message($readiness) . ' Campaign paused before sending.'],
+            ], -80);
+            $state['campaigns'][$index] = $campaign;
+            $changed = true;
+            app_audit('campaign.dispatch_blocked', 'campaign', (string) ($campaign['id'] ?? ''), ['failures' => $readiness['summary']['fail'] ?? 0]);
+            continue;
         }
 
         $state = app_send_one((string) ($campaign['id'] ?? ''));
