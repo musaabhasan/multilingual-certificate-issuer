@@ -119,11 +119,25 @@
                 </label>
                 <label>Random delay min <input id="campaignRandomMin" type="number" min="0" step="0.01" value="45"></label>
                 <label>Random delay max <input id="campaignRandomMax" type="number" min="0" step="0.01" value="75"></label>
+                <div class="quick-actions full-field" aria-label="Schedule shortcuts">
+                    <button id="setCampaignStartNow" type="button">Start now</button>
+                    <button id="clearCampaignEnd" type="button">No end date</button>
+                    <button type="button" data-delay-preset-unit="seconds" data-delay-preset-min="45" data-delay-preset-max="75">45-75s</button>
+                    <button type="button" data-delay-preset-unit="minutes" data-delay-preset-min="2" data-delay-preset-max="5">2-5m</button>
+                    <button type="button" data-delay-preset-unit="tens_minutes" data-delay-preset-min="1" data-delay-preset-max="3">10-30m</button>
+                </div>
                 <label>SMTP profile <input id="campaignSmtp" type="text" value="Institution SMTP"></label>
                 <label class="wide-field">Email subject <input id="campaignEmailSubject" type="text" value="Your certificate is ready"></label>
                 <label class="wide-field">Email body
                     <textarea id="campaignEmailBody" class="short-textarea" spellcheck="true"><p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p></textarea>
                 </label>
+                <div class="token-row wide-field" aria-label="Email variables">
+                    <button type="button" data-email-token="{{name_en}}">name_en</button>
+                    <button type="button" data-email-token="{{name_ar}}">name_ar</button>
+                    <button type="button" data-email-token="{{program_en}}">program_en</button>
+                    <button type="button" data-email-token="{{certificate_number}}">certificate_number</button>
+                    <button type="button" data-email-token="{{verification_url}}">verification_url</button>
+                </div>
                 <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
                 <div class="plan-preview" id="campaignPlanPreview">Add recipients to calculate exact spacing.</div>
                 <button class="primary" type="submit">Create campaign</button>
@@ -134,6 +148,27 @@
             <div class="panel-header">
                 <h2>Campaign lanes</h2>
                 <span id="campaignLaneStatus" class="status ready">Ready</span>
+            </div>
+            <div class="list-toolbar">
+                <label>Search <input id="campaignSearch" type="search" placeholder="Campaign, template, CSV, email"></label>
+                <label>Status
+                    <select id="campaignStatusFilter">
+                        <option value="all">All</option>
+                        <option value="draft">Draft</option>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="running">Running</option>
+                        <option value="paused">Paused</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </label>
+                <label>Sort
+                    <select id="campaignSort">
+                        <option value="updated_desc">Last updated</option>
+                        <option value="start_asc">Start time</option>
+                        <option value="pending_desc">Pending first</option>
+                        <option value="name_asc">Name</option>
+                    </select>
+                </label>
             </div>
             <div id="campaignList" class="campaign-grid"></div>
         </article>

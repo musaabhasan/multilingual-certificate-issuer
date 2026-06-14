@@ -17,6 +17,13 @@ const campaignCsvRows = document.querySelector("#campaignCsvRows");
 const campaignCsvLabels = document.querySelector("#campaignCsvLabels");
 const campaignCsvMapping = document.querySelector("#campaignCsvMapping");
 const campaignCsvPreview = document.querySelector("#campaignCsvPreview");
+const campaignSearch = document.querySelector("#campaignSearch");
+const campaignStatusFilter = document.querySelector("#campaignStatusFilter");
+const campaignSort = document.querySelector("#campaignSort");
+const setCampaignStartNow = document.querySelector("#setCampaignStartNow");
+const clearCampaignEnd = document.querySelector("#clearCampaignEnd");
+const campaignEmailSubject = document.querySelector("#campaignEmailSubject");
+const campaignEmailBody = document.querySelector("#campaignEmailBody");
 
 const requiredLabels = ["unique_identifier", "email", "name_en"];
 const labelRoles = {
@@ -74,8 +81,16 @@ function renderMetrics() {
 }
 
 function renderCampaigns() {
-  const campaigns = store.campaigns();
-  campaignLaneStatus.textContent = `${campaigns.length} campaigns`;
+  const allCampaigns = store.campaigns();
+  const campaigns = filteredCampaigns(allCampaigns);
+  campaignLaneStatus.textContent = campaigns.length === allCampaigns.length
+    ? `${allCampaigns.length} campaigns`
+    : `${campaigns.length} of ${allCampaigns.length}`;
+
+  if (campaigns.length === 0) {
+    campaignList.innerHTML = '<div class="empty-state">No campaigns match the current view.</div>';
+    return;
+  }
 
   campaignList.innerHTML = campaigns.map((campaign) => {
     const template = store.campaignTemplate(campaign);
@@ -164,6 +179,7 @@ function renderCampaigns() {
           <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
           <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
           <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+          <button type="button" data-action="duplicate" data-id="${escapeHtml(campaign.id)}">Duplicate</button>
           <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
           <a class="button" href="/queue.html">Queue details</a>
         </div>
@@ -249,6 +265,10 @@ campaignList.addEventListener("click", async (event) => {
       await store.completeCampaignAsync(button.dataset.id);
       render();
       setCampaignLaneStatus("Campaign closed", "ready");
+    } else if (button.dataset.action === "duplicate") {
+      const copy = duplicateCampaign(button.dataset.id);
+      render();
+      setCampaignLaneStatus(`Duplicated ${copy.name}`, "ready");
     } else if (button.dataset.action === "save-template") {
       const selectedTemplate = document.querySelector(`[data-template-select="${cssEscape(button.dataset.id)}"]`)?.value || "";
       if (!selectedTemplate) {
@@ -381,6 +401,37 @@ campaignList.addEventListener("change", async (event) => {
   document.querySelector(`#${id}`).addEventListener("input", renderPlanPreview);
 });
 
+[campaignSearch, campaignStatusFilter, campaignSort].forEach((control) => {
+  control.addEventListener("input", renderCampaigns);
+});
+
+setCampaignStartNow.addEventListener("click", () => {
+  document.querySelector("#campaignStart").value = toDateTimeInput(new Date());
+  renderPlanPreview();
+});
+
+clearCampaignEnd.addEventListener("click", () => {
+  document.querySelector("#campaignEnd").value = "";
+  renderPlanPreview();
+});
+
+document.querySelectorAll("[data-delay-preset-unit]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector("#campaignRandomUnit").value = button.dataset.delayPresetUnit;
+    document.querySelector("#campaignRandomMin").value = button.dataset.delayPresetMin;
+    document.querySelector("#campaignRandomMax").value = button.dataset.delayPresetMax;
+    renderPlanPreview();
+  });
+});
+
+document.querySelectorAll("[data-email-token]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const active = document.activeElement;
+    const target = active === campaignEmailSubject || active === campaignEmailBody ? active : campaignEmailBody;
+    insertAtCursor(target, button.dataset.emailToken);
+  });
+});
+
 function render() {
   renderTemplateOptions();
   renderTemplateMode();
@@ -438,6 +489,57 @@ function renderPlanPreview() {
   campaignPlanPreview.className = plan.fitsMinimumWindow ? "plan-preview ready" : "plan-preview warning";
 }
 
+function filteredCampaigns(campaigns) {
+  const query = campaignSearch.value.trim().toLowerCase();
+  const status = campaignStatusFilter.value;
+  const sort = campaignSort.value;
+
+  return campaigns
+    .filter((campaign) => {
+      if (status !== "all" && campaign.status !== status) return false;
+      if (query === "") return true;
+
+      const template = store.campaignTemplate(campaign);
+      const searchable = [
+        campaign.name,
+        campaign.importFileName,
+        campaign.emailSubject,
+        campaign.smtpProfile,
+        template?.name,
+        ...(campaign.labels || [])
+      ].join(" ").toLowerCase();
+
+      return searchable.includes(query);
+    })
+    .sort((left, right) => compareCampaigns(left, right, sort));
+}
+
+function compareCampaigns(left, right, sort) {
+  if (sort === "name_asc") {
+    return String(left.name || "").localeCompare(String(right.name || ""));
+  }
+
+  if (sort === "start_asc") {
+    return sortableTime(left.windowStartAt || left.scheduledAt) - sortableTime(right.windowStartAt || right.scheduledAt);
+  }
+
+  if (sort === "pending_desc") {
+    return pendingCount(right) - pendingCount(left);
+  }
+
+  return sortableTime(right.updatedAt) - sortableTime(left.updatedAt);
+}
+
+function pendingCount(campaign) {
+  return Math.max(Number(campaign.recipients || 0) - Number(campaign.sent || 0) - Number(campaign.failed || 0), 0);
+}
+
+function sortableTime(value) {
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
 function validateScheduleValues(windowStartAt, windowEndAt, randomDelayMinSeconds, randomDelayMaxSeconds) {
   if (windowStartAt && windowEndAt && new Date(windowEndAt).getTime() <= new Date(windowStartAt).getTime()) {
     throw new Error("Send end must be after send start, or leave it blank to continue until complete.");
@@ -457,6 +559,71 @@ function normalizeCampaignStatusForSchedule(status, windowStartAt) {
   }
 
   return status;
+}
+
+function duplicateCampaign(campaignId) {
+  const source = store.findCampaign(campaignId);
+  if (!source) {
+    throw new Error("Campaign not found.");
+  }
+
+  const copyName = nextCopyName(source.name || "Campaign");
+  return store.createCampaign({
+    name: copyName,
+    templateId: source.templateId,
+    templateSource: source.templateSource,
+    templateFileName: source.templateFileName,
+    campaignTemplateName: source.campaignTemplateName,
+    status: "draft",
+    scheduledAt: "",
+    windowStartAt: "",
+    windowEndAt: "",
+    windowExpiredAt: "",
+    nextSendAfterAt: "",
+    randomDelayUnit: source.randomDelayUnit,
+    randomDelayMinSeconds: source.randomDelayMinSeconds,
+    randomDelayMaxSeconds: source.randomDelayMaxSeconds,
+    throttleSeconds: source.throttleSeconds,
+    smtpProfile: source.smtpProfile,
+    emailSubject: source.emailSubject,
+    emailBodyHtml: source.emailBodyHtml,
+    attachPdf: true,
+    recipients: 0,
+    rendered: 0,
+    sent: 0,
+    failed: 0,
+    labels: [],
+    recipientQueue: [],
+    importFileName: "",
+    importedAt: "",
+    sampleRows: [],
+    deliveryEvents: [
+      { at: new Date().toISOString(), message: `Campaign setup copied from ${source.name || "campaign"}.` }
+    ]
+  });
+}
+
+function nextCopyName(name) {
+  const existingNames = new Set(store.campaigns().map((campaign) => String(campaign.name || "").toLowerCase()));
+  let candidate = `${name} copy`;
+  let count = 2;
+
+  while (existingNames.has(candidate.toLowerCase())) {
+    candidate = `${name} copy ${count}`;
+    count += 1;
+  }
+
+  return candidate;
+}
+
+function insertAtCursor(target, token) {
+  const value = target.value || "";
+  const start = Number.isInteger(target.selectionStart) ? target.selectionStart : value.length;
+  const end = Number.isInteger(target.selectionEnd) ? target.selectionEnd : start;
+  target.value = `${value.slice(0, start)}${token}${value.slice(end)}`;
+  const cursor = start + token.length;
+  target.focus();
+  target.setSelectionRange(cursor, cursor);
 }
 
 function renderTemplateMode() {
@@ -829,6 +996,13 @@ function toIsoDateTime(value) {
   if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function toDateTimeInput(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
 }
 
 function escapeHtml(value) {

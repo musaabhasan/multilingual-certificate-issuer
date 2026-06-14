@@ -370,6 +370,28 @@ code {
     flex-wrap: wrap;
 }
 
+.quick-actions,
+.token-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.quick-actions button,
+.token-row button {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 12px;
+}
+
+.token-row button {
+    color: var(--blue);
+    background: rgba(25, 118, 210, 0.08);
+    border-color: rgba(25, 118, 210, 0.22);
+    font-family: Consolas, "Courier New", monospace;
+}
+
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -536,6 +558,14 @@ code {
     padding: 15px 20px;
     border-bottom: 1px solid #eeeeee;
     background: #ffffff;
+}
+
+.list-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 180px 180px;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 14px;
 }
 
 .panel h2 {
@@ -766,6 +796,16 @@ code {
     border-radius: 2px;
     padding: 16px;
     background: #ffffff;
+}
+
+.empty-state {
+    grid-column: 1 / -1;
+    border: 1px dashed #d8d8d8;
+    border-radius: 2px;
+    padding: 18px;
+    color: var(--muted);
+    background: #fafafa;
+    font-weight: 700;
 }
 
 .campaign-card h3 {
@@ -1345,6 +1385,7 @@ textarea.short-textarea {
     .form-grid,
     .diagnostics-summary,
     .campaign-grid,
+    .list-toolbar,
     .mfa-setup-grid {
         grid-template-columns: 1fr;
     }
