@@ -44,6 +44,7 @@ let lastCampaignImport = null;
 let lastCampaignTemplateUpload = null;
 const recipientFilters = new Map();
 const expandedCampaigns = new Set();
+const csvEditors = new Set();
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -123,6 +124,7 @@ function renderCampaigns() {
     const randomMinAmount = store.delaySecondsToAmount(campaign.randomDelayMinSeconds, randomUnit);
     const randomMaxAmount = store.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
     const expanded = expandedCampaigns.has(campaign.id);
+    const csvEditorOpen = csvEditors.has(campaign.id);
     const primaryAction = campaign.status === "running" ? "paused" : "running";
     const primaryActionLabel = campaign.status === "running" ? "Stop sending" : "Start";
 
@@ -217,6 +219,8 @@ function renderCampaigns() {
             <label>Replace campaign CSV
               <input data-csv-upload="${escapeHtml(campaign.id)}" type="file" accept=".csv,text/csv">
             </label>
+            <button type="button" data-action="toggle-csv-editor" data-id="${escapeHtml(campaign.id)}">${csvEditorOpen ? "Close CSV editor" : "Edit CSV data"}</button>
+            <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}" ${allRecipients.length === 0 ? "disabled" : ""}>Download CSV</button>
             <label>Saved template
               <select data-template-select="${escapeHtml(campaign.id)}">${templateOptionsMarkup(campaign.templateId)}</select>
             </label>
@@ -226,6 +230,21 @@ function renderCampaigns() {
               <input data-template-upload="${escapeHtml(campaign.id)}" type="file" accept="image/png,image/jpeg,image/webp">
             </label>
           </div>
+        </div>
+        <div class="csv-editor-panel" ${csvEditorOpen ? "" : "hidden"}>
+          <div class="panel-header">
+            <div>
+              <h4>CSV data editor</h4>
+              <p>Edit labels or recipient rows, then save to rebuild this campaign's recipient queue.</p>
+            </div>
+            <span class="status ${allRecipients.length > 0 ? "ready" : "locked"}">${allRecipients.length} rows</span>
+          </div>
+          <textarea data-csv-editor="${escapeHtml(campaign.id)}" class="csv-textarea" spellcheck="false">${escapeHtml(campaignToCsv(campaign))}</textarea>
+          <div class="action-row">
+            <button type="button" data-action="save-csv-editor" data-id="${escapeHtml(campaign.id)}">Save CSV changes</button>
+            <button type="button" data-action="download-csv" data-id="${escapeHtml(campaign.id)}">Download CSV</button>
+          </div>
+          <p class="subtle-note">Saving edited CSV data replaces the campaign recipient list and resets those recipients to queued.</p>
         </div>
         <div class="email-editor">
           <label>Email subject
@@ -414,6 +433,24 @@ campaignList.addEventListener("click", async (event) => {
       recipientFilters.delete(button.dataset.id);
       render();
       setCampaignLaneStatus("Recipient filter cleared", "ready");
+    } else if (button.dataset.action === "toggle-csv-editor") {
+      if (csvEditors.has(button.dataset.id)) {
+        csvEditors.delete(button.dataset.id);
+      } else {
+        expandedCampaigns.add(button.dataset.id);
+        csvEditors.add(button.dataset.id);
+      }
+      renderCampaigns();
+      setCampaignLaneStatus("CSV editor view updated", "ready");
+    } else if (button.dataset.action === "save-csv-editor") {
+      saveEditedCampaignCsv(button.dataset.id);
+      expandedCampaigns.add(button.dataset.id);
+      csvEditors.add(button.dataset.id);
+      render();
+      setCampaignLaneStatus("Campaign CSV data saved", "ready");
+    } else if (button.dataset.action === "download-csv") {
+      downloadCampaignCsv(button.dataset.id);
+      setCampaignLaneStatus("CSV downloaded", "ready");
     } else if (button.dataset.action === "save-template") {
       const selectedTemplate = document.querySelector(`[data-template-select="${cssEscape(button.dataset.id)}"]`)?.value || "";
       if (!selectedTemplate) {
@@ -1083,9 +1120,13 @@ async function importCampaignCsv(file) {
 
 async function parseCampaignCsvFile(file) {
   const text = await file.text();
+  return parseCampaignCsvText(text, file.name);
+}
+
+function parseCampaignCsvText(text, fileName = "edited-recipients.csv") {
   const rows = parseCsv(text);
   const { headers, records } = buildRecords(rows);
-  return { fileName: file.name, headers, records };
+  return { fileName, headers, records };
 }
 
 function parseCsv(text) {
@@ -1154,6 +1195,90 @@ function buildRecords(rows) {
     .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index]?.trim() || ""])));
 
   return { headers, records };
+}
+
+function campaignToCsv(campaign) {
+  const headers = campaignCsvHeaders(campaign);
+  const rows = [headers];
+  const queue = Array.isArray(campaign.recipientQueue) ? campaign.recipientQueue : [];
+
+  queue.forEach((recipient) => {
+    const data = recipient.data && typeof recipient.data === "object" ? recipient.data : {};
+    rows.push(headers.map((header) => {
+      if (Object.prototype.hasOwnProperty.call(data, header)) return data[header];
+      if (header === "email") return recipient.email || "";
+      if (header === "name_en") return recipient.nameEn || recipient.displayName || "";
+      if (header === "name_ar") return recipient.nameAr || "";
+      if (header === "unique_identifier") return recipient.identifier || "";
+      return "";
+    }));
+  });
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function campaignCsvHeaders(campaign) {
+  const labels = Array.isArray(campaign.labels) ? campaign.labels.filter(Boolean) : [];
+  const queue = Array.isArray(campaign.recipientQueue) ? campaign.recipientQueue : [];
+  const dataKeys = queue.flatMap((recipient) => (
+    recipient.data && typeof recipient.data === "object" ? Object.keys(recipient.data) : []
+  ));
+  const fallback = ["unique_identifier", "email", "name_en", "name_ar"];
+  return [...new Set([...labels, ...dataKeys, ...fallback])];
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function saveEditedCampaignCsv(campaignId) {
+  const campaign = store.findCampaign(campaignId);
+  if (!campaign) {
+    throw new Error("Campaign not found.");
+  }
+
+  const textarea = document.querySelector(`[data-csv-editor="${cssEscape(campaignId)}"]`);
+  if (!textarea) {
+    throw new Error("CSV editor is not open.");
+  }
+
+  const counts = store.campaignCounts(campaign);
+  const hasProgress = counts.sent > 0 || counts.failed > 0 || counts.skipped > 0 || counts.rendered > 0;
+  if (hasProgress && !window.confirm("Saving CSV changes rebuilds this campaign recipient queue and resets delivery progress for these recipients. Continue?")) {
+    throw new Error("CSV save cancelled.");
+  }
+
+  const fileName = campaign.importFileName || `${campaign.name || "campaign"}-recipients.csv`;
+  const importBatch = {
+    ...parseCampaignCsvText(textarea.value, fileName),
+    status: campaign.status === "completed" ? "draft" : (campaign.status === "running" ? "paused" : campaign.status),
+    message: `CSV data edited in the campaign editor.`
+  };
+  const missing = missingLabels(importBatch.headers);
+  if (missing.length > 0) {
+    throw new Error(`CSV is missing required labels: ${missing.join(", ")}.`);
+  }
+
+  store.attachImportToCampaign(campaignId, importBatch);
+}
+
+function downloadCampaignCsv(campaignId) {
+  const campaign = store.findCampaign(campaignId);
+  if (!campaign) {
+    throw new Error("Campaign not found.");
+  }
+
+  const textarea = document.querySelector(`[data-csv-editor="${cssEscape(campaignId)}"]`);
+  const csv = textarea?.value || campaignToCsv(campaign);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = campaign.importFileName || `${campaign.name || "campaign"}-recipients.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
 }
 
 function normalizeHeader(header, index) {

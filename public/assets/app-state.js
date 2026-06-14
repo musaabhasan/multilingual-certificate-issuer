@@ -476,16 +476,20 @@
 
     return {
       ...campaign,
+      status: importBatch.status || campaign.status,
       labels: importBatch.headers,
       recipients: recipientQueue.length,
       rendered: 0,
       sent: 0,
       failed: 0,
+      skipped: 0,
       importFileName: importBatch.fileName,
       importedAt: now(),
+      completedAt: "",
+      nextSendAfterAt: "",
       sampleRows: importBatch.records.slice(0, 5),
       recipientQueue,
-      deliveryEvents: addDeliveryEvent(campaign, `${recipientQueue.length} recipients imported from ${importBatch.fileName}.`)
+      deliveryEvents: addDeliveryEvent(campaign, importBatch.message || `${recipientQueue.length} recipients imported from ${importBatch.fileName}.`)
     };
   }
 

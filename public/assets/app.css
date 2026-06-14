@@ -913,6 +913,27 @@ code {
     justify-content: center;
 }
 
+.csv-editor-panel {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    border-top: 1px solid #e6edf5;
+    padding-top: 14px;
+}
+
+.csv-editor-panel[hidden] {
+    display: none;
+}
+
+.csv-textarea {
+    min-height: 260px;
+    max-height: 52vh;
+    resize: vertical;
+    white-space: pre;
+    overflow: auto;
+    font: 13px/1.45 Consolas, "Courier New", monospace;
+}
+
 .table-actions {
     display: flex;
     flex-wrap: wrap;
