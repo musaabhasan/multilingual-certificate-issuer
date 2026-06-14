@@ -146,6 +146,13 @@ button.primary,
     box-shadow: 0 2px 4px rgba(0, 150, 136, 0.24);
 }
 
+button.danger,
+.button.danger {
+    border-color: rgba(255, 82, 82, 0.4);
+    color: #c62828;
+    background: rgba(255, 82, 82, 0.08);
+}
+
 button:disabled {
     cursor: not-allowed;
     opacity: 0.58;
@@ -621,6 +628,11 @@ code {
     color: #c62828;
 }
 
+.pill.skipped {
+    background: rgba(117, 117, 117, 0.14);
+    color: #616161;
+}
+
 .stepper {
     display: grid;
     gap: 12px;
@@ -847,6 +859,45 @@ code {
 
 .campaign-assets .button {
     justify-content: center;
+}
+
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.table-actions button {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+
+.recipient-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    gap: 8px;
+    align-items: end;
+    min-width: 720px;
+    margin-bottom: 8px;
+}
+
+.recipient-toolbar button {
+    min-height: 40px;
+}
+
+.recipient-toolbar span {
+    align-self: center;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.subtle-note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .email-preview {

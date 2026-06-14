@@ -8,6 +8,7 @@ let queueRefreshInFlight = false;
 let queueActionInFlight = false;
 let queueWorkerInFlight = false;
 let autoQueueEnabled = true;
+const queueRecipientFilters = new Map();
 
 function renderQueue() {
   const summary = queueStore.summary();
@@ -64,10 +65,12 @@ function renderCampaignQueue(campaign) {
   const template = queueStore.campaignTemplate(campaign);
   const plan = queueStore.deliveryPlan(campaign);
   const recipients = Number(campaign.recipients || 0);
-  const sent = Number(campaign.sent || 0);
-  const failed = Number(campaign.failed || 0);
-  const pending = Math.max(recipients - sent - failed, 0);
-  const progress = recipients > 0 ? Math.round((sent / recipients) * 100) : 0;
+  const counts = queueStore.campaignCounts(campaign);
+  const sent = counts.sent;
+  const failed = counts.failed;
+  const skipped = counts.skipped;
+  const pending = counts.pending;
+  const progress = recipients > 0 ? Math.round(((sent + failed + skipped) / recipients) * 100) : 0;
   const expired = isWindowExpired(campaign, plan);
   const planClass = !expired && plan.fitsMinimumWindow ? "status ready" : "status warning";
   const planLabel = plan.continuesUntilComplete
@@ -76,7 +79,11 @@ function renderCampaignQueue(campaign) {
     ? "Delivery window ended. Restart the window or extend the end time to continue sending."
     : (plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer");
   const events = (campaign.deliveryEvents || []).slice(-4).reverse();
-  const recipientRows = (campaign.recipientQueue || []).slice(0, 10);
+  const recipientFilter = queueRecipientFilters.get(campaign.id) || "";
+  const allRecipients = campaign.recipientQueue || [];
+  const matchingRecipients = filterRecipients(allRecipients, recipientFilter);
+  const recipientRows = matchingRecipients.slice(0, 25);
+  const hiddenRecipientCount = Math.max(0, matchingRecipients.length - recipientRows.length);
   const randomUnit = queueStore.normalizeDelayUnit(campaign.randomDelayUnit);
   const randomMinAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMinSeconds, randomUnit);
   const randomMaxAmount = queueStore.delaySecondsToAmount(campaign.randomDelayMaxSeconds, randomUnit);
@@ -97,6 +104,7 @@ function renderCampaignQueue(campaign) {
         <div><dt>Pending</dt><dd>${pending}</dd></div>
         <div><dt>Sent</dt><dd>${sent}</dd></div>
         <div><dt>Failed</dt><dd>${failed}</dd></div>
+        <div><dt>Skipped</dt><dd>${skipped}</dd></div>
         <div><dt>Next send</dt><dd>${escapeHtml(nextSendLabel(campaign, plan))}</dd></div>
         <div><dt>Window</dt><dd>${escapeHtml(windowLabel(campaign))}</dd></div>
         <div><dt>Avg spacing</dt><dd>${queueStore.formatDuration(plan.calculatedSpacingSeconds)}</dd></div>
@@ -132,8 +140,16 @@ function renderCampaignQueue(campaign) {
         <pre>${escapeHtml(campaign.emailBodyHtml || "<p>Your certificate is attached as a PDF.</p>")}</pre>
       </div>
       <div class="table-scroll recipient-preview">
+        <div class="recipient-toolbar">
+          <label>Find recipient
+            <input data-recipient-filter-input="${escapeHtml(campaign.id)}" type="search" placeholder="Name, email, or certificate id" value="${escapeAttribute(recipientFilter)}">
+          </label>
+          <button type="button" data-action="filter-recipients" data-id="${escapeHtml(campaign.id)}">Filter</button>
+          <button type="button" data-action="clear-recipient-filter" data-id="${escapeHtml(campaign.id)}">Clear</button>
+          <span>${recipientRows.length} of ${matchingRecipients.length} shown</span>
+        </div>
         <table class="data-table compact-preview">
-          <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Sent at</th></tr></thead>
+          <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Sent at</th><th>Actions</th></tr></thead>
           <tbody>
             ${recipientRows.map((recipient) => `
               <tr>
@@ -142,19 +158,24 @@ function renderCampaignQueue(campaign) {
                 <td>${escapeHtml(recipient.email || "-")}</td>
                 <td><span class="${queueStore.recipientStatusClass(recipient.status)}">${queueStore.recipientStatusLabel(recipient.status)}</span></td>
                 <td>${escapeHtml(shortTime(recipient.sentAt) || "-")}</td>
+                <td>${recipientActionsMarkup(campaign.id, recipient)}</td>
               </tr>
-            `).join("") || "<tr><td colspan=\"5\">No recipient CSV attached yet.</td></tr>"}
+            `).join("") || "<tr><td colspan=\"6\">No recipient CSV attached yet.</td></tr>"}
           </tbody>
         </table>
       </div>
+      ${hiddenRecipientCount > 0 ? `<p class="subtle-note">Showing first ${recipientRows.length} matching recipients. Use the recipient filter to narrow larger lists.</p>` : ""}
       <div class="event-list">
         ${events.map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No sends recorded yet.</span></div>"}
       </div>
       <div class="action-row">
         <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">${expired && pending > 0 ? "Restart window" : "Start"}</button>
-        <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
+        <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Stop sending</button>
         <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
+        <button type="button" data-action="restart-campaign" data-id="${escapeHtml(campaign.id)}">Restart campaign</button>
+        <button type="button" data-action="reuse-campaign" data-id="${escapeHtml(campaign.id)}">Reuse with recipients</button>
         <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
+        <button type="button" class="danger" data-action="delete-campaign" data-id="${escapeHtml(campaign.id)}">Delete</button>
       </div>
     </article>
   `;
@@ -222,14 +243,30 @@ function hasAutoQueueWork() {
     if (!["scheduled", "running"].includes(campaign.status)) return false;
     if (isWindowExpired(campaign)) return false;
 
-    const recipients = Number(campaign.recipients || 0);
-    const sent = Number(campaign.sent || 0);
-    const failed = Number(campaign.failed || 0);
-    return Math.max(recipients - sent - failed, 0) > 0;
+    return queueStore.campaignCounts(campaign).pending > 0;
   });
 }
 
 queueCampaignList.addEventListener("click", async (event) => {
+  const recipientButton = event.target.closest("button[data-recipient-action]");
+  if (recipientButton) {
+    queueActionInFlight = true;
+    recipientButton.disabled = true;
+    setQueueStatus("Updating recipient", "pending");
+
+    try {
+      updateRecipientFromButton(recipientButton);
+      renderQueue();
+      setQueueStatus("Recipient queue updated", "ready");
+    } catch (error) {
+      setQueueStatus(error.message, "warning");
+    } finally {
+      queueActionInFlight = false;
+      recipientButton.disabled = false;
+    }
+    return;
+  }
+
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
@@ -255,6 +292,40 @@ queueCampaignList.addEventListener("click", async (event) => {
       saveCampaignSchedule(button.dataset.id);
       renderQueue();
       setQueueStatus("Campaign schedule updated", "ready");
+    } else if (button.dataset.action === "restart-campaign") {
+      if (!window.confirm("Restarting resets all recipients to queued and pauses this campaign. Continue?")) {
+        setQueueStatus("Restart cancelled", "locked");
+        return;
+      }
+      queueStore.restartCampaign(button.dataset.id);
+      renderQueue();
+      setQueueStatus("Campaign queue reset. Start it when ready.", "ready");
+    } else if (button.dataset.action === "reuse-campaign") {
+      const copy = queueStore.reuseCampaign(button.dataset.id);
+      renderQueue();
+      setQueueStatus(`Reusable campaign created: ${copy?.name || "campaign"}`, "ready");
+    } else if (button.dataset.action === "delete-campaign") {
+      const campaign = queueStore.findCampaign(button.dataset.id);
+      if (!window.confirm(`Delete ${campaign?.name || "this campaign"}? This removes the campaign queue and events.`)) {
+        setQueueStatus("Delete cancelled", "locked");
+        return;
+      }
+      queueStore.deleteCampaign(button.dataset.id);
+      renderQueue();
+      setQueueStatus("Campaign deleted", "ready");
+    } else if (button.dataset.action === "filter-recipients") {
+      const value = document.querySelector(`[data-recipient-filter-input="${cssEscape(button.dataset.id)}"]`)?.value.trim() || "";
+      if (value) {
+        queueRecipientFilters.set(button.dataset.id, value);
+      } else {
+        queueRecipientFilters.delete(button.dataset.id);
+      }
+      renderQueue();
+      setQueueStatus("Recipient list filtered", "ready");
+    } else if (button.dataset.action === "clear-recipient-filter") {
+      queueRecipientFilters.delete(button.dataset.id);
+      renderQueue();
+      setQueueStatus("Recipient filter cleared", "ready");
     } else {
       await queueStore.updateCampaignStatusAsync(button.dataset.id, button.dataset.action);
       renderQueue();
@@ -285,7 +356,7 @@ function nextSendLabel(campaign, plan) {
   if (isWindowExpired(campaign, plan)) return "Window ended";
   if (campaign.nextSendAfterAt) return shortTime(campaign.nextSendAfterAt);
   if (!plan.start || plan.recipients === 0) return "Not scheduled";
-  if (Number(campaign.sent || 0) >= plan.recipients) return "Done";
+  if (queueStore.campaignCounts(campaign).pending <= 0) return "Done";
   if (plan.start.getTime() > Date.now()) return shortTime(plan.start.toISOString());
   if (plan.pendingRecipients > 0) return "Due now";
 
@@ -296,6 +367,67 @@ function nextSendLabel(campaign, plan) {
 function windowLabel(campaign) {
   if (!campaign.windowStartAt && !campaign.windowEndAt) return "Not set";
   return `${campaign.windowStartAt || "?"} to ${campaign.windowEndAt || "completion"}`;
+}
+
+function filterRecipients(recipients, query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) return recipients;
+
+  return recipients.filter((recipient) => {
+    const data = recipient.data && typeof recipient.data === "object" ? Object.values(recipient.data) : [];
+    return [
+      recipient.displayName,
+      recipient.email,
+      recipient.identifier,
+      recipient.nameEn,
+      recipient.nameAr,
+      ...data
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+  });
+}
+
+function recipientActionsMarkup(campaignId, recipient) {
+  const status = recipient.status || "queued";
+  const retryLabel = status === "sent" ? "Resend" : "Retry";
+  const skipDisabled = status === "sent" || status === "skipped";
+
+  return `
+    <div class="table-actions">
+      <button type="button" data-recipient-action="retry" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}">${retryLabel}</button>
+      <button type="button" data-recipient-action="skip" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}" ${skipDisabled ? "disabled" : ""}>Skip</button>
+      <button type="button" class="danger" data-recipient-action="remove" data-id="${escapeHtml(campaignId)}" data-recipient-id="${escapeHtml(recipient.id)}">Remove</button>
+    </div>
+  `;
+}
+
+function updateRecipientFromButton(button) {
+  const campaignId = button.dataset.id;
+  const recipientId = button.dataset.recipientId;
+  const campaign = queueStore.findCampaign(campaignId);
+  const recipient = (campaign?.recipientQueue || []).find((record) => record.id === recipientId);
+  if (!campaign || !recipient) {
+    throw new Error("Recipient not found.");
+  }
+
+  if (button.dataset.recipientAction === "remove") {
+    if (!window.confirm(`Remove ${recipient.displayName || recipient.email || "this recipient"} from this campaign?`)) {
+      throw new Error("Recipient removal cancelled.");
+    }
+    queueStore.removeRecipient(campaignId, recipientId);
+    return;
+  }
+
+  if (button.dataset.recipientAction === "retry") {
+    if (recipient.status === "sent" && !window.confirm(`Queue ${recipient.displayName || recipient.email || "this recipient"} for resending?`)) {
+      throw new Error("Resend cancelled.");
+    }
+    queueStore.retryRecipient(campaignId, recipientId);
+    return;
+  }
+
+  if (button.dataset.recipientAction === "skip") {
+    queueStore.skipRecipient(campaignId, recipientId);
+  }
 }
 
 function saveCampaignSchedule(campaignId) {
@@ -327,7 +459,7 @@ function saveCampaignSchedule(campaignId) {
     ? "scheduled"
     : (campaign.status === "draft" ? "scheduled" : campaign.status);
 
-  queueStore.updateCampaign(campaignId, {
+  queueStore.updateCampaignSchedule(campaignId, {
     status,
     scheduledAt: windowStartAt,
     windowStartAt,
@@ -337,8 +469,7 @@ function saveCampaignSchedule(campaignId) {
     randomDelayUnit,
     randomDelayMinSeconds,
     randomDelayMaxSeconds,
-    throttleSeconds: randomDelayMinSeconds,
-    deliveryEvents: addQueueEvent(campaign, "Campaign schedule and send buffer updated.")
+    throttleSeconds: randomDelayMinSeconds
   });
 }
 
@@ -346,18 +477,7 @@ function isWindowExpired(campaign, plan = queueStore.deliveryPlan(campaign)) {
   if (campaign.status === "completed" || campaign.status === "paused") return false;
   if (!plan.end) return false;
 
-  const recipients = Number(campaign.recipients || 0);
-  const sent = Number(campaign.sent || 0);
-  const failed = Number(campaign.failed || 0);
-  const pending = Math.max(recipients - sent - failed, 0);
-  return pending > 0 && Date.now() > plan.end.getTime();
-}
-
-function addQueueEvent(campaign, message, date = new Date()) {
-  return [
-    ...(Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents : []),
-    { at: date.toISOString(), message }
-  ].slice(-80);
+  return queueStore.campaignCounts(campaign).pending > 0 && Date.now() > plan.end.getTime();
 }
 
 function toDateTimeInput(value) {

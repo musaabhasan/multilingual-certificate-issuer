@@ -9,6 +9,7 @@
     tens_minutes: { label: "Tens of minutes", multiplier: 600 },
     hours: { label: "Hours", multiplier: 3600 }
   });
+  const terminalRecipientStatuses = Object.freeze(["sent", "failed", "skipped"]);
 
   const seedState = {
     templates: [
@@ -281,7 +282,11 @@
       sentAt: record.sentAt || "",
       failedAt: record.failedAt || "",
       failedReason: record.failedReason || "",
+      skippedAt: record.skippedAt || "",
       certificatePath: record.certificatePath || "",
+      verificationTokenHash: record.verificationTokenHash || "",
+      verificationIssuedAt: record.verificationIssuedAt || "",
+      verificationUrl: record.verificationUrl || "",
       data: { ...data }
     };
   }
@@ -293,14 +298,38 @@
   function queueCounts(queue) {
     const sent = queue.filter((record) => record.status === "sent").length;
     const failed = queue.filter((record) => record.status === "failed").length;
+    const skipped = queue.filter((record) => record.status === "skipped").length;
     const rendered = queue.filter((record) => ["rendered", "sent", "failed"].includes(record.status)).length;
+    const pending = queue.filter((record) => !terminalRecipientStatuses.includes(record.status || "queued")).length;
 
     return {
       recipients: queue.length,
       rendered,
       sent,
       failed,
-      pending: Math.max(queue.length - sent - failed, 0)
+      skipped,
+      pending
+    };
+  }
+
+  function campaignCounts(campaign) {
+    const queue = Array.isArray(campaign?.recipientQueue) ? campaign.recipientQueue : [];
+    if (queue.length > 0) {
+      return queueCounts(queue);
+    }
+
+    const recipients = Number(campaign?.recipients || 0);
+    const sent = Number(campaign?.sent || 0);
+    const failed = Number(campaign?.failed || 0);
+    const skipped = Number(campaign?.skipped || 0);
+
+    return {
+      recipients,
+      rendered: Number(campaign?.rendered || 0),
+      sent,
+      failed,
+      skipped,
+      pending: Math.max(recipients - sent - failed - skipped, 0)
     };
   }
 
@@ -331,6 +360,7 @@
       rendered: counts?.rendered ?? Number(campaign.rendered || 0),
       sent: counts?.sent ?? Number(campaign.sent || 0),
       failed: counts?.failed ?? Number(campaign.failed || 0),
+      skipped: counts?.skipped ?? Number(campaign.skipped || 0),
       throttleSeconds: Number(campaign.throttleSeconds || 60),
       windowStartAt: campaign.windowStartAt || campaign.scheduledAt || "",
       windowEndAt: campaign.windowEndAt || "",
@@ -465,6 +495,140 @@
     return saveCampaign({ ...campaign, ...updates });
   }
 
+  function deleteCampaign(id) {
+    const state = getState();
+    const campaign = state.campaigns.find((item) => item.id === id);
+    if (!campaign) return null;
+
+    state.campaigns = state.campaigns.filter((item) => item.id !== id);
+    saveState(state);
+    return campaign;
+  }
+
+  function updateCampaignSchedule(id, updates) {
+    const campaign = findCampaign(id);
+    if (!campaign) return null;
+
+    return updateCampaign(id, {
+      ...updates,
+      deliveryEvents: addDeliveryEvent(campaign, "Campaign schedule and send buffer updated.")
+    });
+  }
+
+  function retryRecipient(campaignId, recipientId) {
+    return updateCampaignRecipient(campaignId, recipientId, "retry");
+  }
+
+  function skipRecipient(campaignId, recipientId) {
+    return updateCampaignRecipient(campaignId, recipientId, "skip");
+  }
+
+  function removeRecipient(campaignId, recipientId) {
+    return updateCampaignRecipient(campaignId, recipientId, "remove");
+  }
+
+  function updateCampaignRecipient(campaignId, recipientId, action) {
+    const campaign = findCampaign(campaignId);
+    if (!campaign) return null;
+
+    let changedRecipient = null;
+    let queue = Array.isArray(campaign.recipientQueue) ? campaign.recipientQueue : [];
+    const currentStatus = (queue.find((record) => record.id === recipientId)?.status || "queued").toLowerCase();
+
+    if (action === "remove") {
+      changedRecipient = queue.find((record) => record.id === recipientId) || null;
+      queue = queue.filter((record) => record.id !== recipientId);
+    } else {
+      queue = queue.map((record) => {
+        if (record.id !== recipientId) return record;
+        changedRecipient = record;
+        if (action === "retry") return resetRecipientForSending(record);
+        if (action === "skip") {
+          return {
+            ...record,
+            status: "skipped",
+            renderedAt: "",
+            sentAt: "",
+            failedAt: "",
+            failedReason: "",
+            skippedAt: now(),
+            certificatePath: "",
+            verificationTokenHash: "",
+            verificationIssuedAt: "",
+            verificationUrl: ""
+          };
+        }
+        return record;
+      });
+    }
+
+    if (!changedRecipient) return campaign;
+
+    const counts = queueCounts(queue);
+    const message = recipientActionMessage(action, changedRecipient, currentStatus);
+    const nextStatus = counts.pending === 0 && queue.length > 0 && ["running", "scheduled"].includes(campaign.status)
+      ? "paused"
+      : campaign.status;
+
+    return saveCampaign({
+      ...campaign,
+      ...counts,
+      status: nextStatus,
+      recipientQueue: queue,
+      nextSendAfterAt: counts.pending === 0 ? "" : (campaign.nextSendAfterAt || ""),
+      completedAt: nextStatus === "completed" ? now() : "",
+      deliveryEvents: addDeliveryEvent(campaign, message)
+    });
+  }
+
+  function restartCampaign(campaignId) {
+    const campaign = findCampaign(campaignId);
+    if (!campaign) return null;
+    const queue = (campaign.recipientQueue || []).map(resetRecipientForSending);
+    const counts = queueCounts(queue);
+    const startAt = toDateTimeLocal(new Date());
+
+    return saveCampaign({
+      ...campaign,
+      ...counts,
+      status: "paused",
+      scheduledAt: startAt,
+      windowStartAt: startAt,
+      windowEndAt: "",
+      windowExpiredAt: "",
+      nextSendAfterAt: "",
+      completedAt: "",
+      recipientQueue: queue,
+      deliveryEvents: addDeliveryEvent(campaign, "Campaign queue reset. Start the campaign when the schedule and speed are ready.")
+    });
+  }
+
+  function reuseCampaign(campaignId) {
+    const source = findCampaign(campaignId);
+    if (!source) return null;
+    const copyName = nextCampaignCopyName(source.name || "Campaign");
+    const queue = (source.recipientQueue || []).map(resetRecipientForSending);
+    const counts = queueCounts(queue);
+
+    return saveCampaign({
+      ...source,
+      ...counts,
+      id: uniqueId("campaign", copyName),
+      name: copyName,
+      status: "draft",
+      scheduledAt: "",
+      windowStartAt: "",
+      windowEndAt: "",
+      windowExpiredAt: "",
+      nextSendAfterAt: "",
+      completedAt: "",
+      recipientQueue: queue,
+      deliveryEvents: [
+        { at: now(), message: `Reusable campaign created from ${source.name || "campaign"}.` }
+      ]
+    });
+  }
+
   function attachImportToCampaign(id, importBatch) {
     const campaign = findCampaign(id);
     if (!campaign) return null;
@@ -474,8 +638,9 @@
 
   function deliveryPlan(campaign) {
     const normalized = normalizeCampaign(campaign);
-    const recipients = Math.max(Number(normalized.recipients || 0) - Number(normalized.failed || 0), 0);
-    const pendingRecipients = Math.max(recipients - Number(normalized.sent || 0), 0);
+    const counts = campaignCounts(normalized);
+    const recipients = Math.max(Number(normalized.recipients || counts.recipients || 0), 0);
+    const pendingRecipients = counts.pending;
     const start = parseLocalDateTime(normalized.windowStartAt || normalized.scheduledAt);
     const end = parseLocalDateTime(normalized.windowEndAt);
     const windowSeconds = start && end && end > start ? Math.floor((end - start) / 1000) : 0;
@@ -620,6 +785,43 @@
     return date.toISOString();
   }
 
+  function resetRecipientForSending(record) {
+    return {
+      ...record,
+      status: "queued",
+      renderedAt: "",
+      sentAt: "",
+      failedAt: "",
+      failedReason: "",
+      skippedAt: "",
+      certificatePath: "",
+      verificationTokenHash: "",
+      verificationIssuedAt: "",
+      verificationUrl: ""
+    };
+  }
+
+  function recipientActionMessage(action, recipient, previousStatus) {
+    const name = recipient.displayName || recipient.email || recipient.identifier || "recipient";
+    if (action === "remove") return `Removed ${name} from the campaign queue.`;
+    if (action === "skip") return `Skipped ${name}; delivery will continue with the remaining recipients.`;
+    if (previousStatus === "sent") return `Queued ${name} for resending.`;
+    return `Queued ${name} for retry.`;
+  }
+
+  function nextCampaignCopyName(name) {
+    const existingNames = new Set(campaigns().map((campaign) => String(campaign.name || "").toLowerCase()));
+    let candidate = `${name} copy`;
+    let count = 2;
+
+    while (existingNames.has(candidate.toLowerCase())) {
+      candidate = `${name} copy ${count}`;
+      count += 1;
+    }
+
+    return candidate;
+  }
+
   function campaignTemplate(campaign) {
     return findTemplate(campaign.templateId);
   }
@@ -649,6 +851,7 @@
   function recipientStatusClass(status) {
     if (status === "sent") return "pill sent";
     if (status === "failed") return "pill failed";
+    if (status === "skipped") return "pill skipped";
     return "pill queued";
   }
 
@@ -664,6 +867,7 @@
     const totalRecipients = state.campaigns.reduce((sum, campaign) => sum + Number(campaign.recipients || 0), 0);
     const totalSent = state.campaigns.reduce((sum, campaign) => sum + Number(campaign.sent || 0), 0);
     const totalFailed = state.campaigns.reduce((sum, campaign) => sum + Number(campaign.failed || 0), 0);
+    const totalSkipped = state.campaigns.reduce((sum, campaign) => sum + Number(campaign.skipped || 0), 0);
 
     return {
       templates: state.templates.length,
@@ -671,9 +875,10 @@
       campaigns: state.campaigns.length,
       activeCampaigns: activeCampaigns.length,
       totalRecipients,
-      queued: Math.max(totalRecipients - totalSent - totalFailed, 0),
+      queued: Math.max(totalRecipients - totalSent - totalFailed - totalSkipped, 0),
       sent: totalSent,
-      failed: totalFailed
+      failed: totalFailed,
+      skipped: totalSkipped
     };
   }
 
@@ -689,7 +894,15 @@
     saveCampaign,
     createCampaign,
     updateCampaign,
+    deleteCampaign,
+    updateCampaignSchedule,
+    campaignCounts,
     attachImportToCampaign,
+    retryRecipient,
+    skipRecipient,
+    removeRecipient,
+    restartCampaign,
+    reuseCampaign,
     buildRecipientQueue,
     deliveryPlan,
     formatDuration,

@@ -15,7 +15,7 @@ function renderDashboard() {
 
   document.querySelector("#dashboardCampaignList").innerHTML = campaigns.map((campaign) => {
     const template = dashboardStore.campaignTemplate(campaign);
-    const pending = Math.max(Number(campaign.recipients || 0) - Number(campaign.sent || 0) - Number(campaign.failed || 0), 0);
+    const pending = dashboardStore.campaignCounts(campaign).pending;
 
     return `
       <div class="mini-list-row">

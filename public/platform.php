@@ -1080,6 +1080,7 @@ function app_recipient_status_counts(array $queue): array
 {
     $sent = count(array_filter($queue, fn (array $record): bool => ($record['status'] ?? '') === 'sent'));
     $failed = count(array_filter($queue, fn (array $record): bool => ($record['status'] ?? '') === 'failed'));
+    $skipped = count(array_filter($queue, fn (array $record): bool => ($record['status'] ?? '') === 'skipped'));
     $rendered = count(array_filter($queue, fn (array $record): bool => in_array(($record['status'] ?? ''), ['rendered', 'sent', 'failed'], true)));
 
     return [
@@ -1087,6 +1088,7 @@ function app_recipient_status_counts(array $queue): array
         'rendered' => $rendered,
         'sent' => $sent,
         'failed' => $failed,
+        'skipped' => $skipped,
     ];
 }
 
@@ -1237,6 +1239,7 @@ function app_send_one(string $campaignId): array
         $campaign['rendered'] = $counts['rendered'];
         $campaign['sent'] = $counts['sent'];
         $campaign['failed'] = $counts['failed'];
+        $campaign['skipped'] = $counts['skipped'];
         $campaign['updatedAt'] = app_now();
         $state['campaigns'][$found['index']] = $campaign;
         app_save_state($state);
@@ -1309,8 +1312,7 @@ function app_dispatch_due_campaigns(): array
 
         if ($endAt !== null && $now > $endAt) {
             $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
-            $counts = app_recipient_status_counts($queue);
-            $pending = max((int) $counts['recipients'] - (int) $counts['sent'] - (int) $counts['failed'], 0);
+            $pending = app_pending_recipient_count($queue);
             if ($pending > 0 && trim((string) ($campaign['windowExpiredAt'] ?? '')) === '') {
                 $campaign['windowExpiredAt'] = app_now();
                 $campaign['updatedAt'] = app_now();
