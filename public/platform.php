@@ -223,7 +223,7 @@ function app_validate_state(array $state): array
     $templates = is_array($state['templates'] ?? null) ? array_values($state['templates']) : [];
     $campaigns = is_array($state['campaigns'] ?? null) ? array_values($state['campaigns']) : [];
 
-    if (count($templates) > 100) {
+    if (count($templates) > 300) {
         throw new RuntimeException('Template limit exceeded.');
     }
 
@@ -1300,6 +1300,7 @@ function app_render_and_deliver(array $campaign, array $template, array $recipie
     $layout = new TemplateLayout(
         page: is_array($template['layout']['page'] ?? null) ? $template['layout']['page'] : ['width' => 297, 'height' => 210, 'orientation' => 'landscape'],
         background: isset($template['layout']['background']) ? (string) $template['layout']['background'] : null,
+        backgroundFit: isset($template['layout']['backgroundFit']) ? (string) $template['layout']['backgroundFit'] : 'stretch',
         elements: is_array($template['layout']['elements'] ?? null) ? $template['layout']['elements'] : []
     );
     if (app_template_has_verification_qr($layout->elements)) {

@@ -1,6 +1,12 @@
 const store = window.CertificateIssuerStore;
 const campaignForm = document.querySelector("#campaignForm");
 const campaignTemplate = document.querySelector("#campaignTemplate");
+const campaignTemplateMode = document.querySelector("#campaignTemplateMode");
+const campaignTemplateName = document.querySelector("#campaignTemplateName");
+const campaignTemplateFile = document.querySelector("#campaignTemplateFile");
+const campaignTemplateFit = document.querySelector("#campaignTemplateFit");
+const campaignTemplateStatus = document.querySelector("#campaignTemplateStatus");
+const campaignTemplatePreview = document.querySelector("#campaignTemplatePreview");
 const campaignList = document.querySelector("#campaignList");
 const campaignLaneStatus = document.querySelector("#campaignLaneStatus");
 const campaignPlanPreview = document.querySelector("#campaignPlanPreview");
@@ -28,6 +34,7 @@ const labelRoles = {
 };
 
 let lastCampaignImport = null;
+let lastCampaignTemplateUpload = null;
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -36,13 +43,26 @@ function setCampaignLaneStatus(text, state = "ready") {
 
 function renderTemplateOptions() {
   const selected = campaignTemplate.value;
-  campaignTemplate.innerHTML = store.templates().map((template) => (
-    `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)} (${escapeHtml(template.status)})</option>`
-  )).join("");
+  const templates = store.templates();
+  campaignTemplate.innerHTML = templateOptionsMarkup(selected);
 
-  if (selected && [...campaignTemplate.options].some((option) => option.value === selected)) {
+  if (selected && templates.some((template) => template.id === selected)) {
     campaignTemplate.value = selected;
   }
+
+  campaignTemplate.disabled = templates.length === 0;
+}
+
+function templateOptionsMarkup(selectedId = "") {
+  const templates = store.templates();
+  if (templates.length === 0) {
+    return '<option value="">No saved templates</option>';
+  }
+
+  return templates.map((template) => {
+    const selected = template.id === selectedId ? " selected" : "";
+    return `<option value="${escapeHtml(template.id)}"${selected}>${escapeHtml(template.name)} (${escapeHtml(template.status)})</option>`;
+  }).join("");
 }
 
 function renderMetrics() {
@@ -59,6 +79,8 @@ function renderCampaigns() {
 
   campaignList.innerHTML = campaigns.map((campaign) => {
     const template = store.campaignTemplate(campaign);
+    const templateSource = templateSourceLabel(campaign);
+    const templateFile = campaign.templateFileName || template?.layout?.background || "Saved template";
     const pending = Math.max(Number(campaign.recipients || 0) - Number(campaign.sent || 0) - Number(campaign.failed || 0), 0);
     const plan = store.deliveryPlan(campaign);
     const planClass = plan.fitsMinimumWindow ? "status ready" : "status warning";
@@ -79,6 +101,8 @@ function renderCampaigns() {
         <div class="progress-bar" aria-label="Campaign progress"><span style="width: ${progress}%"></span></div>
         <dl class="detail-list compact-details">
           <div><dt>CSV file</dt><dd>${escapeHtml(campaign.importFileName || "No CSV attached")}</dd></div>
+          <div><dt>Template source</dt><dd>${escapeHtml(templateSource)}</dd></div>
+          <div><dt>Template file</dt><dd>${escapeHtml(templateFile)}</dd></div>
           <div><dt>Labels</dt><dd>${escapeHtml((campaign.labels || []).slice(0, 4).join(", ") || "None")}${(campaign.labels || []).length > 4 ? ` +${(campaign.labels || []).length - 4}` : ""}</dd></div>
           <div><dt>Recipients</dt><dd>${Number(campaign.recipients || 0)}</dd></div>
           <div><dt>Sent</dt><dd>${Number(campaign.sent || 0)}</dd></div>
@@ -105,6 +129,21 @@ function renderCampaigns() {
             </tbody>
           </table>
         </div>
+        <div class="campaign-assets">
+          <h4>Campaign assets</h4>
+          <div class="asset-grid">
+            <label>Replace campaign CSV
+              <input data-csv-upload="${escapeHtml(campaign.id)}" type="file" accept=".csv,text/csv">
+            </label>
+            <label>Saved template
+              <select data-template-select="${escapeHtml(campaign.id)}">${templateOptionsMarkup(campaign.templateId)}</select>
+            </label>
+            <button type="button" data-action="save-template" data-id="${escapeHtml(campaign.id)}">Use selected template</button>
+            <label>Upload campaign template image
+              <input data-template-upload="${escapeHtml(campaign.id)}" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+          </div>
+        </div>
         <div class="email-editor">
           <label>Email subject
             <input data-email-subject="${escapeHtml(campaign.id)}" type="text" value="${escapeAttribute(campaign.emailSubject)}">
@@ -130,34 +169,52 @@ function renderCampaigns() {
   }).join("");
 }
 
-campaignForm.addEventListener("submit", (event) => {
+campaignForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = document.querySelector("#campaignName").value.trim();
   if (!name) return;
 
-  const created = store.createCampaign({
-    name,
-    templateId: campaignTemplate.value,
-    status: document.querySelector("#campaignStatus").value,
-    scheduledAt: toIsoDateTime(document.querySelector("#campaignStart").value),
-    windowStartAt: toIsoDateTime(document.querySelector("#campaignStart").value),
-    windowEndAt: toIsoDateTime(document.querySelector("#campaignEnd").value),
-    randomDelayMinSeconds: Number(document.querySelector("#campaignRandomMin").value || 0),
-    randomDelayMaxSeconds: Number(document.querySelector("#campaignRandomMax").value || 0),
-    throttleSeconds: Number(document.querySelector("#campaignRandomMin").value || 60),
-    smtpProfile: document.querySelector("#campaignSmtp").value.trim() || "Institution SMTP",
-    emailSubject: document.querySelector("#campaignEmailSubject").value.trim() || "Your certificate is ready",
-    emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
-    attachPdf: true,
-    recipients: 0,
-    rendered: 0,
-    sent: 0,
-    failed: 0,
-    labels: []
-  }, lastCampaignImport);
+  setCampaignLaneStatus("Creating campaign", "pending");
 
-  render();
-  setCampaignLaneStatus(`Created ${created.name}`, "ready");
+  try {
+    const templateAssignment = createTemplateAssignmentForNewCampaign(name);
+    const created = store.createCampaign({
+      name,
+      templateId: templateAssignment.templateId,
+      templateSource: templateAssignment.templateSource,
+      templateFileName: templateAssignment.templateFileName,
+      campaignTemplateName: templateAssignment.campaignTemplateName,
+      status: document.querySelector("#campaignStatus").value,
+      scheduledAt: toIsoDateTime(document.querySelector("#campaignStart").value),
+      windowStartAt: toIsoDateTime(document.querySelector("#campaignStart").value),
+      windowEndAt: toIsoDateTime(document.querySelector("#campaignEnd").value),
+      randomDelayMinSeconds: Number(document.querySelector("#campaignRandomMin").value || 0),
+      randomDelayMaxSeconds: Number(document.querySelector("#campaignRandomMax").value || 0),
+      throttleSeconds: Number(document.querySelector("#campaignRandomMin").value || 60),
+      smtpProfile: document.querySelector("#campaignSmtp").value.trim() || "Institution SMTP",
+      emailSubject: document.querySelector("#campaignEmailSubject").value.trim() || "Your certificate is ready",
+      emailBodyHtml: document.querySelector("#campaignEmailBody").value.trim() || "<p>Your certificate is attached as a PDF.</p><p>Verification link: <a href=\"{{verification_url}}\">{{verification_url}}</a></p>",
+      attachPdf: true,
+      recipients: 0,
+      rendered: 0,
+      sent: 0,
+      failed: 0,
+      labels: []
+    }, lastCampaignImport);
+
+    lastCampaignImport = null;
+    lastCampaignTemplateUpload = null;
+    campaignCsvFile.value = "";
+    campaignTemplateFile.value = "";
+    resetCampaignCsvPreview();
+    setTemplateUploadStatus("No template image selected", "locked");
+    campaignTemplatePreview.textContent = "Upload a PNG, JPG, or WebP certificate background. Recipient name, program, date, and QR fields will be added automatically.";
+
+    render();
+    setCampaignLaneStatus(`Created ${created.name}`, "ready");
+  } catch (error) {
+    setCampaignLaneStatus(error.message, "warning");
+  }
 });
 
 campaignList.addEventListener("click", async (event) => {
@@ -180,6 +237,21 @@ campaignList.addEventListener("click", async (event) => {
       await store.completeCampaignAsync(button.dataset.id);
       render();
       setCampaignLaneStatus("Campaign closed", "ready");
+    } else if (button.dataset.action === "save-template") {
+      const selectedTemplate = document.querySelector(`[data-template-select="${cssEscape(button.dataset.id)}"]`)?.value || "";
+      if (!selectedTemplate) {
+        throw new Error("Select a saved template first.");
+      }
+      const template = store.findTemplate(selectedTemplate);
+      store.updateCampaign(button.dataset.id, {
+        templateId: selectedTemplate,
+        templateSource: "saved_template",
+        templateFileName: "",
+        campaignTemplateName: template?.name || "",
+        deliveryEvents: addCampaignEvent(store.findCampaign(button.dataset.id) || {}, `Template changed to ${template?.name || "saved template"}.`)
+      });
+      render();
+      setCampaignLaneStatus("Campaign template updated", "ready");
     } else if (button.dataset.action === "save-email") {
       const subject = document.querySelector(`[data-email-subject="${cssEscape(button.dataset.id)}"]`)?.value.trim();
       const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
@@ -221,12 +293,85 @@ campaignCsvFile.addEventListener("change", async () => {
   renderPlanPreview();
 });
 
+campaignTemplateMode.addEventListener("change", () => {
+  renderTemplateMode();
+  renderPlanPreview();
+});
+
+campaignTemplateFile.addEventListener("change", async () => {
+  const file = campaignTemplateFile.files && campaignTemplateFile.files[0];
+  if (!file) return;
+
+  setTemplateUploadStatus("Uploading template image", "pending");
+  campaignTemplatePreview.textContent = file.name;
+  try {
+    lastCampaignTemplateUpload = await uploadTemplateImage(file);
+    setTemplateUploadStatus("Template image ready", "ready");
+    campaignTemplatePreview.textContent = file.name;
+  } catch (error) {
+    lastCampaignTemplateUpload = null;
+    setTemplateUploadStatus("Template upload failed", "failed");
+    campaignTemplatePreview.textContent = error.message;
+  }
+});
+
+campaignList.addEventListener("change", async (event) => {
+  const csvInput = event.target.closest("input[data-csv-upload]");
+  if (csvInput) {
+    const file = csvInput.files && csvInput.files[0];
+    if (!file) return;
+
+    setCampaignLaneStatus("Replacing campaign CSV", "pending");
+    try {
+      const importBatch = await parseCampaignCsvFile(file);
+      const updated = store.attachImportToCampaign(csvInput.dataset.csvUpload, importBatch);
+      render();
+      setCampaignLaneStatus(`Attached ${importBatch.records.length} recipients to ${updated?.name || "campaign"}`, "ready");
+    } catch (error) {
+      setCampaignLaneStatus(error.message, "warning");
+    }
+    return;
+  }
+
+  const templateInput = event.target.closest("input[data-template-upload]");
+  if (templateInput) {
+    const file = templateInput.files && templateInput.files[0];
+    if (!file) return;
+
+    setCampaignLaneStatus("Uploading campaign template", "pending");
+    try {
+      const campaign = store.findCampaign(templateInput.dataset.templateUpload);
+      if (!campaign) throw new Error("Campaign not found.");
+      const uploaded = await uploadTemplateImage(file);
+      const template = saveCampaignTemplate({
+        campaign,
+        templateName: campaign.campaignTemplateName || `${campaign.name} certificate template`,
+        upload: uploaded,
+        fit: "stretch",
+        replaceExistingOwnedTemplate: true
+      });
+      store.updateCampaign(campaign.id, {
+        templateId: template.id,
+        templateSource: "campaign_upload",
+        templateFileName: uploaded.originalName,
+        campaignTemplateName: template.name,
+        deliveryEvents: addCampaignEvent(campaign, `Campaign template image changed to ${uploaded.originalName}.`)
+      });
+      render();
+      setCampaignLaneStatus("Campaign template image updated", "ready");
+    } catch (error) {
+      setCampaignLaneStatus(error.message, "warning");
+    }
+  }
+});
+
 ["campaignStart", "campaignEnd", "campaignRandomMin", "campaignRandomMax"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("input", renderPlanPreview);
 });
 
 function render() {
   renderTemplateOptions();
+  renderTemplateMode();
   renderMetrics();
   renderCampaigns();
   renderPlanPreview();
@@ -271,13 +416,203 @@ function renderPlanPreview() {
   campaignPlanPreview.className = plan.fitsMinimumWindow ? "plan-preview ready" : "plan-preview warning";
 }
 
+function renderTemplateMode() {
+  const mode = campaignTemplateMode.value;
+  document.querySelectorAll("[data-template-mode-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.templateModePanel !== mode;
+  });
+}
+
+function createTemplateAssignmentForNewCampaign(campaignName) {
+  if (campaignTemplateMode.value === "upload") {
+    if (!lastCampaignTemplateUpload) {
+      throw new Error("Upload the campaign template image before creating the campaign.");
+    }
+
+    const template = saveCampaignTemplate({
+      campaign: { name: campaignName },
+      templateName: campaignTemplateName.value.trim() || `${campaignName} certificate template`,
+      upload: lastCampaignTemplateUpload,
+      fit: campaignTemplateFit.value,
+      replaceExistingOwnedTemplate: false
+    });
+
+    return {
+      templateId: template.id,
+      templateSource: "campaign_upload",
+      templateFileName: lastCampaignTemplateUpload.originalName,
+      campaignTemplateName: template.name
+    };
+  }
+
+  if (!campaignTemplate.value) {
+    throw new Error("Select a saved template or upload a template image for this campaign.");
+  }
+
+  const template = store.findTemplate(campaignTemplate.value);
+  return {
+    templateId: campaignTemplate.value,
+    templateSource: "saved_template",
+    templateFileName: "",
+    campaignTemplateName: template?.name || ""
+  };
+}
+
+function saveCampaignTemplate({ campaign, templateName, upload, fit, replaceExistingOwnedTemplate }) {
+  const existingTemplate = replaceExistingOwnedTemplate && campaign.templateSource === "campaign_upload"
+    ? store.findTemplate(campaign.templateId)
+    : null;
+
+  return store.saveTemplate({
+    id: existingTemplate?.id,
+    name: templateName,
+    status: "approved",
+    campaignOwned: true,
+    campaignId: campaign.id || "",
+    layout: {
+      page: { width: 297, height: 210, orientation: "landscape" },
+      background: upload.path,
+      backgroundFit: normalizeBackgroundFit(fit),
+      elements: defaultCampaignTemplateElements()
+    }
+  });
+}
+
+function defaultCampaignTemplateElements() {
+  return [
+    {
+      type: "csv_text",
+      key: "recipient_name_en",
+      label: "Recipient Name",
+      source: "name_en",
+      x: 66,
+      y: 80,
+      width: 165,
+      height: 16,
+      font: "arial",
+      fontSize: 24,
+      align: "center",
+      direction: "ltr",
+      color: "#111827"
+    },
+    {
+      type: "csv_text",
+      key: "recipient_name_ar",
+      label: "Arabic Recipient Name",
+      source: "name_ar",
+      x: 66,
+      y: 99,
+      width: 165,
+      height: 16,
+      font: "traditional_arabic",
+      fontSize: 24,
+      align: "center",
+      direction: "rtl",
+      color: "#111827"
+    },
+    {
+      type: "csv_text",
+      key: "program_en",
+      label: "Program",
+      source: "program_en",
+      x: 78,
+      y: 123,
+      width: 142,
+      height: 12,
+      font: "arial",
+      fontSize: 15,
+      align: "center",
+      direction: "ltr",
+      color: "#344054"
+    },
+    {
+      type: "csv_text",
+      key: "issue_date",
+      label: "Issue Date",
+      source: "issue_date",
+      x: 124,
+      y: 151,
+      width: 50,
+      height: 9,
+      font: "arial",
+      fontSize: 11,
+      align: "center",
+      direction: "ltr",
+      color: "#344054"
+    },
+    {
+      type: "verification_qr",
+      key: "verification_qr",
+      label: "Verification QR",
+      x: 251,
+      y: 164,
+      width: 28,
+      height: 28,
+      fit: "contain"
+    }
+  ];
+}
+
+async function uploadTemplateImage(file) {
+  const formData = new FormData();
+  formData.append("asset", file);
+  formData.append("category", "backgrounds");
+
+  const response = await fetch("/upload-asset.php", {
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": window.CertificateIssuerAuth?.csrfToken || ""
+    },
+    body: formData
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Template image upload failed.");
+  }
+
+  return { ...payload, originalName: file.name };
+}
+
+function setTemplateUploadStatus(text, state = "locked") {
+  campaignTemplateStatus.textContent = text;
+  campaignTemplateStatus.className = `status ${state}`;
+}
+
+function normalizeBackgroundFit(value) {
+  return ["cover", "contain", "stretch"].includes(value) ? value : "stretch";
+}
+
+function templateSourceLabel(campaign) {
+  if (campaign.templateSource === "campaign_upload") return "Campaign upload";
+  return "Saved template";
+}
+
+function addCampaignEvent(campaign, message, date = new Date()) {
+  return [
+    ...(Array.isArray(campaign.deliveryEvents) ? campaign.deliveryEvents : []),
+    { at: date.toISOString(), message }
+  ].slice(-80);
+}
+
+function resetCampaignCsvPreview() {
+  setCsvStatus("No CSV selected", "status locked");
+  campaignCsvFileName.textContent = "Upload a recipient CSV for this campaign.";
+  campaignCsvRows.textContent = "0";
+  campaignCsvLabels.textContent = "0";
+  campaignCsvMapping.innerHTML = `
+    <tr><td><code>email</code></td><td>Recipient email</td><td><span class="pill sent">Required</span></td></tr>
+    <tr><td><code>name_en</code></td><td>English name</td><td><span class="pill sent">Required</span></td></tr>
+    <tr><td><code>unique_identifier</code></td><td>Certificate id</td><td><span class="pill queued">Recommended</span></td></tr>
+  `;
+  campaignCsvPreview.innerHTML = '<thead><tr><th>Preview</th><th>Status</th></tr></thead><tbody><tr><td>Select a CSV to preview the first rows.</td><td><span class="pill queued">Waiting</span></td></tr></tbody>';
+}
+
 async function importCampaignCsv(file) {
   campaignCsvFileName.textContent = file.name;
   setCsvStatus("Reading CSV", "status pending");
 
-  const text = await file.text();
-  const rows = parseCsv(text);
-  const { headers, records } = buildRecords(rows);
+  const { headers, records } = await parseCampaignCsvFile(file);
   const missing = missingLabels(headers);
 
   lastCampaignImport = { fileName: file.name, headers, records };
@@ -293,6 +628,13 @@ async function importCampaignCsv(file) {
   } else {
     setCsvStatus("CSV ready for this campaign", "status ready");
   }
+}
+
+async function parseCampaignCsvFile(file) {
+  const text = await file.text();
+  const rows = parseCsv(text);
+  const { headers, records } = buildRecords(rows);
+  return { fileName: file.name, headers, records };
 }
 
 function parseCsv(text) {

@@ -38,7 +38,6 @@ function e(string $value): string
     <nav aria-label="Primary navigation">
         <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php" aria-current="page">Verify</a>
         <a href="/mfa.php">MFA</a>

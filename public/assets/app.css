@@ -463,6 +463,7 @@ code {
     white-space: nowrap;
 }
 
+.template-upload-summary,
 .plan-preview {
     align-self: stretch;
     display: flex;
@@ -475,6 +476,17 @@ code {
     background: #fafafa;
     font-size: 13px;
     font-weight: 700;
+}
+
+.template-upload-summary {
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.template-upload-summary span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .plan-preview.ready {
@@ -771,6 +783,30 @@ code {
     margin: 14px 0;
     border-top: 1px solid #e6edf5;
     padding-top: 14px;
+}
+
+.campaign-assets {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    border-top: 1px solid #e6edf5;
+    padding-top: 14px;
+}
+
+.campaign-assets h4 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.campaign-assets .asset-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+}
+
+.campaign-assets .button {
+    justify-content: center;
 }
 
 .email-preview {
@@ -1322,6 +1358,16 @@ textarea.short-textarea {
 
     .csv-summary {
         grid-template-columns: 1fr;
+    }
+
+    .template-upload-summary,
+    .campaign-assets .asset-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .template-upload-summary {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .page-title {

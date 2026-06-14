@@ -12,7 +12,6 @@
     <nav aria-label="Primary navigation">
         <a href="/campaigns.html" aria-current="page">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
         <a href="/mfa.php">MFA</a>
@@ -26,10 +25,9 @@
         <div>
             <p class="eyebrow">Campaign operations</p>
             <h1>Campaigns</h1>
-            <p>Create separate certificate campaigns, assign templates, schedule delivery, and run multiple batches in parallel.</p>
+            <p>Create each certificate campaign with its own template, recipient CSV, delivery schedule, and email content.</p>
         </div>
         <div class="actions">
-            <a class="button" href="/designer.html">Manage templates</a>
             <a class="button" href="/samples/recipient-import-sample.csv" download>Download sample CSV</a>
         </div>
     </section>
@@ -49,9 +47,6 @@
             </div>
             <form id="campaignForm" class="form-grid">
                 <label>Campaign name <input id="campaignName" type="text" required value="New Certificate Campaign"></label>
-                <label>Template
-                    <select id="campaignTemplate"></select>
-                </label>
                 <label>Status
                     <select id="campaignStatus">
                         <option value="draft">Draft</option>
@@ -60,6 +55,32 @@
                         <option value="paused">Paused</option>
                     </select>
                 </label>
+                <label>Template source
+                    <select id="campaignTemplateMode">
+                        <option value="saved">Use saved template</option>
+                        <option value="upload">Upload template for this campaign</option>
+                    </select>
+                </label>
+                <label class="wide-field" data-template-mode-panel="saved">Saved template
+                    <select id="campaignTemplate"></select>
+                </label>
+                <label data-template-mode-panel="upload">Template name
+                    <input id="campaignTemplateName" type="text" value="Campaign certificate template">
+                </label>
+                <label data-template-mode-panel="upload">Background fit
+                    <select id="campaignTemplateFit">
+                        <option value="stretch">Stretch to page</option>
+                        <option value="contain">Contain inside page</option>
+                        <option value="cover">Cover page</option>
+                    </select>
+                </label>
+                <label class="wide-field" data-template-mode-panel="upload">Template image
+                    <input id="campaignTemplateFile" type="file" accept="image/png,image/jpeg,image/webp">
+                </label>
+                <div class="template-upload-summary full-field" data-template-mode-panel="upload">
+                    <span id="campaignTemplateStatus" class="status locked">No template image selected</span>
+                    <span id="campaignTemplatePreview">Upload a PNG, JPG, or WebP certificate background. Recipient name, program, date, and QR fields will be added automatically.</span>
+                </div>
                 <label class="wide-field">Dedicated CSV file
                     <input id="campaignCsvFile" type="file" accept=".csv,text/csv">
                 </label>

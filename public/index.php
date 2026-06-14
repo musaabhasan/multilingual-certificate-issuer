@@ -21,7 +21,6 @@ app_require_auth();
     <nav aria-label="Primary navigation">
         <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
         <a href="/mfa.php">MFA</a>
@@ -35,11 +34,11 @@ app_require_auth();
         <div>
             <p class="eyebrow">Credential operations</p>
             <h1>Issuance dashboard</h1>
-            <p>Manage bilingual templates, recipient batches, PDF generation, and controlled SMTP distribution.</p>
+            <p>Manage campaign templates, recipient CSV uploads, PDF generation, and controlled SMTP distribution.</p>
         </div>
         <div class="actions">
-            <a class="button primary" href="/designer.html">New template</a>
-            <a class="button" href="/import.html">Import CSV</a>
+            <a class="button primary" href="/campaigns.html">Create campaign</a>
+            <a class="button" href="/designer.html">Advanced designer</a>
         </div>
     </section>
 

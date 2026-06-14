@@ -111,7 +111,7 @@ final class CertificateRenderer
      */
     public function html(TemplateLayout $layout, array $recipient): string
     {
-        $background = $layout->background !== null ? $this->backgroundCss($layout->background) : '';
+        $background = $layout->background !== null ? $this->backgroundCss($layout->background, $layout->normalizedBackgroundFit()) : '';
         $parts = [
             '<html><head><meta charset="UTF-8"><style>',
             '@page { margin: 0; }',
@@ -216,10 +216,16 @@ final class CertificateRenderer
         return '<div class="element" style="' . $style . '"></div>';
     }
 
-    private function backgroundCss(string $backgroundPath): string
+    private function backgroundCss(string $backgroundPath, string $fit): string
     {
         $safePath = str_replace('\\', '/', $backgroundPath);
-        return "background-image: url('" . htmlspecialchars($safePath, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "'); background-size: 100% 100%;";
+        $size = match ($fit) {
+            'cover' => 'cover',
+            'contain' => 'contain',
+            default => '100% 100%',
+        };
+
+        return "background-image: url('" . htmlspecialchars($safePath, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "'); background-repeat: no-repeat; background-position: center; background-size: " . $size . ';';
     }
 
     /**

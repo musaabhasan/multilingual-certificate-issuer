@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Recipient Import</title>
+    <script>window.location.replace("/campaigns.html");</script>
     <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -12,7 +13,6 @@
     <nav aria-label="Primary navigation">
         <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html" aria-current="page">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
         <a href="/mfa.php">MFA</a>
@@ -24,12 +24,12 @@
     <section class="page-title compact">
         <div>
             <p class="eyebrow">Recipient data</p>
-            <h1>CSV import and mapping</h1>
-            <p>Upload recipient rows, inspect detected labels, and review data before certificate generation.</p>
+            <h1>Campaign CSV upload</h1>
+            <p>CSV upload is now managed inside each campaign so recipients, template, schedule, and email content stay together.</p>
         </div>
         <div class="actions">
             <a class="button" href="/samples/recipient-import-sample.csv" download>Download sample CSV</a>
-            <label class="button primary file-button" for="csvFile">Upload CSV</label>
+            <a class="button primary" href="/campaigns.html">Open campaigns</a>
         </div>
     </section>
 

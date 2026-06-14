@@ -15,6 +15,7 @@ final class TemplateLayout
     public function __construct(
         public readonly array $page,
         public readonly ?string $background,
+        public readonly string $backgroundFit,
         public readonly array $elements
     ) {
         $this->validate();
@@ -30,6 +31,7 @@ final class TemplateLayout
         return new self(
             page: is_array($data['page'] ?? null) ? $data['page'] : [],
             background: isset($data['background']) ? (string) $data['background'] : null,
+            backgroundFit: isset($data['backgroundFit']) ? (string) $data['backgroundFit'] : 'stretch',
             elements: is_array($data['elements'] ?? null) ? $data['elements'] : []
         );
     }
@@ -58,6 +60,12 @@ final class TemplateLayout
     {
         $orientation = strtolower((string) ($this->page['orientation'] ?? 'landscape'));
         return in_array($orientation, ['portrait', 'landscape'], true) ? $orientation : 'landscape';
+    }
+
+    public function normalizedBackgroundFit(): string
+    {
+        $fit = strtolower($this->backgroundFit);
+        return in_array($fit, ['cover', 'contain', 'stretch'], true) ? $fit : 'stretch';
     }
 
     private function validate(): void
