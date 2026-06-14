@@ -1090,6 +1090,24 @@ function app_recipient_status_counts(array $queue): array
     ];
 }
 
+function app_pending_recipient_count(array $queue): int
+{
+    return count(array_filter(
+        $queue,
+        static fn (array $record): bool => !in_array(($record['status'] ?? 'queued'), ['sent', 'failed', 'skipped'], true)
+    ));
+}
+
+function app_recommended_window_seconds(array $campaign, int $pendingRecipients): int
+{
+    if ($pendingRecipients <= 1) {
+        return 300;
+    }
+
+    $maximum = max(1, (int) ($campaign['randomDelayMaxSeconds'] ?? $campaign['throttleSeconds'] ?? 60));
+    return max(300, $maximum * ($pendingRecipients - 1) + 120);
+}
+
 function app_update_campaign_status(string $campaignId, string $status): array
 {
     $status = strtolower(trim($status));
@@ -1106,6 +1124,31 @@ function app_update_campaign_status(string $campaignId, string $status): array
     $campaign = $found['campaign'];
     $previousStatus = (string) ($campaign['status'] ?? 'draft');
     $campaign['status'] = $status;
+    $eventMessage = null;
+
+    if ($status === 'running') {
+        $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];
+        $pending = app_pending_recipient_count($queue);
+        $now = time();
+        $startAt = app_time_or_null((string) ($campaign['windowStartAt'] ?? $campaign['scheduledAt'] ?? ''));
+        $endAt = app_time_or_null((string) ($campaign['windowEndAt'] ?? ''));
+
+        if ($startAt === null || $startAt > $now) {
+            $campaign['windowStartAt'] = app_now();
+            $campaign['scheduledAt'] = $campaign['windowStartAt'];
+            $campaign['nextSendAfterAt'] = '';
+        }
+
+        if ($pending > 0 && $endAt !== null && $endAt <= $now) {
+            $duration = app_recommended_window_seconds($campaign, $pending);
+            $campaign['windowStartAt'] = app_now();
+            $campaign['scheduledAt'] = $campaign['windowStartAt'];
+            $campaign['windowEndAt'] = gmdate('c', $now + $duration);
+            $campaign['windowExpiredAt'] = '';
+            $campaign['nextSendAfterAt'] = '';
+            $eventMessage = 'Campaign restarted with a fresh delivery window because the previous window had ended.';
+        }
+    }
 
     if ($status === 'running' && trim((string) ($campaign['windowStartAt'] ?? '')) === '') {
         $campaign['windowStartAt'] = app_now();
@@ -1119,10 +1162,10 @@ function app_update_campaign_status(string $campaignId, string $status): array
         'paused' => 'Campaign paused.',
     ];
 
-    if ($previousStatus !== $status) {
+    if ($previousStatus !== $status || $eventMessage !== null) {
         $campaign['deliveryEvents'] = array_slice([
             ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
-            ['at' => app_now(), 'message' => $eventMessages[$status]],
+            ['at' => app_now(), 'message' => $eventMessage ?? $eventMessages[$status]],
         ], -80);
     }
 
@@ -1176,7 +1219,7 @@ function app_send_one(string $campaignId): array
         $campaign['recipientQueue'] = $queue;
         $campaign['status'] = app_all_recipients_terminal($queue) ? 'completed' : 'running';
         $campaign['completedAt'] = $campaign['status'] === 'completed' ? app_now() : ($campaign['completedAt'] ?? '');
-        $campaign['nextSendAfterAt'] = $campaign['status'] === 'completed' ? '' : app_next_send_after($campaign);
+        $campaign['nextSendAfterAt'] = $campaign['status'] === 'completed' ? '' : app_next_send_after($campaign, $queue);
         $campaign['deliveryEvents'] = array_slice([
             ...(is_array($campaign['deliveryEvents'] ?? null) ? $campaign['deliveryEvents'] : []),
             ['at' => app_now(), 'message' => $result['message']],
@@ -1370,10 +1413,24 @@ function app_template_has_verification_qr(array $elements): bool
     return false;
 }
 
-function app_next_send_after(array $campaign): string
+function app_next_send_after(array $campaign, array $queue): string
 {
+    $pending = app_pending_recipient_count($queue);
+    if ($pending <= 0) {
+        return '';
+    }
+
     $minimum = max(0, (int) ($campaign['randomDelayMinSeconds'] ?? $campaign['throttleSeconds'] ?? 60));
     $maximum = max($minimum, (int) ($campaign['randomDelayMaxSeconds'] ?? $minimum));
+    $endAt = app_time_or_null((string) ($campaign['windowEndAt'] ?? ''));
+
+    if ($endAt !== null) {
+        $remainingSeconds = max(0, $endAt - time());
+        $windowCap = max(0, (int) floor($remainingSeconds / ($pending + 1)));
+        $maximum = min($maximum, $windowCap);
+        $minimum = min($minimum, $maximum);
+    }
+
     $delay = $maximum > 0 ? random_int($minimum, $maximum) : 0;
     return gmdate('c', time() + $delay);
 }

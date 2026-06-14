@@ -3,8 +3,11 @@ const queueCampaignList = document.querySelector("#queueCampaignList");
 const queueWorkerStatus = document.querySelector("#queueWorkerStatus");
 const processDueQueue = document.querySelector("#processDueQueue");
 const refreshQueue = document.querySelector("#refreshQueue");
+const toggleAutoQueue = document.querySelector("#toggleAutoQueue");
 let queueRefreshInFlight = false;
 let queueActionInFlight = false;
+let queueWorkerInFlight = false;
+let autoQueueEnabled = true;
 
 function renderQueue() {
   const summary = queueStore.summary();
@@ -32,6 +35,11 @@ function renderQueue() {
 function setQueueStatus(text, state = "ready") {
   queueWorkerStatus.textContent = text;
   queueWorkerStatus.className = `status ${state}`;
+}
+
+function renderAutoQueueButton() {
+  toggleAutoQueue.textContent = autoQueueEnabled ? "Auto queue on" : "Auto queue off";
+  toggleAutoQueue.className = autoQueueEnabled ? "primary" : "";
 }
 
 function renderSmtpProfile() {
@@ -63,7 +71,7 @@ function renderCampaignQueue(campaign) {
   const expired = isWindowExpired(campaign, plan);
   const planClass = !expired && plan.fitsMinimumWindow ? "status ready" : "status warning";
   const planLabel = expired
-    ? "Delivery window ended. Extend the end time to continue scheduled sending."
+    ? "Delivery window ended. Restart the window or extend the end time to continue sending."
     : (plan.fitsMinimumWindow ? "Buffer fits delivery window" : "Window too short for minimum buffer");
   const events = (campaign.deliveryEvents || []).slice(-4).reverse();
   const recipientRows = (campaign.recipientQueue || []).slice(0, 10);
@@ -135,7 +143,7 @@ function renderCampaignQueue(campaign) {
         ${events.map((event) => `<div><strong>${escapeHtml(shortTime(event.at))}</strong><span>${escapeHtml(event.message)}</span></div>`).join("") || "<div><span>No sends recorded yet.</span></div>"}
       </div>
       <div class="action-row">
-        <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">Start</button>
+        <button type="button" data-action="running" data-id="${escapeHtml(campaign.id)}">${expired && pending > 0 ? "Restart window" : "Start"}</button>
         <button type="button" data-action="paused" data-id="${escapeHtml(campaign.id)}">Pause</button>
         <button type="button" data-action="send-one" data-id="${escapeHtml(campaign.id)}">Send one now</button>
         <button type="button" data-action="completed" data-id="${escapeHtml(campaign.id)}" ${pending > 0 ? "disabled title=\"All recipients must be sent, failed, or skipped before closing.\"" : ""}>Close campaign</button>
@@ -145,7 +153,7 @@ function renderCampaignQueue(campaign) {
 }
 
 async function refreshQueueState() {
-  if (queueRefreshInFlight || queueActionInFlight) return;
+  if (queueRefreshInFlight || queueActionInFlight || queueWorkerInFlight) return;
   queueRefreshInFlight = true;
 
   try {
@@ -157,20 +165,60 @@ async function refreshQueueState() {
 }
 
 async function processDueRecipients() {
+  if (queueActionInFlight || queueWorkerInFlight) return;
   queueActionInFlight = true;
   processDueQueue.disabled = true;
   setQueueStatus("Processing one due recipient per active campaign", "pending");
 
   try {
-    await queueStore.dispatchDueCampaigns();
+    const processed = await dispatchDueQueue();
     renderQueue();
-    setQueueStatus("Due queue processed", "ready");
+    setQueueStatus(processed > 0 ? `Processed ${processed} due recipient${processed === 1 ? "" : "s"}` : "No due recipients right now", "ready");
   } catch (error) {
     setQueueStatus(error.message, "warning");
   } finally {
     queueActionInFlight = false;
     processDueQueue.disabled = false;
   }
+}
+
+async function runAutoQueue() {
+  if (!autoQueueEnabled || queueActionInFlight || queueRefreshInFlight || queueWorkerInFlight) return;
+  if (!hasAutoQueueWork()) return;
+
+  queueWorkerInFlight = true;
+  setQueueStatus("Auto queue checking due recipients", "pending");
+
+  try {
+    const processed = await dispatchDueQueue();
+    renderQueue();
+    if (processed > 0) {
+      setQueueStatus(`Auto queue processed ${processed} recipient${processed === 1 ? "" : "s"}`, "ready");
+    }
+  } catch (error) {
+    setQueueStatus(error.message, "warning");
+  } finally {
+    queueWorkerInFlight = false;
+  }
+}
+
+async function dispatchDueQueue() {
+  const before = queueStore.summary();
+  await queueStore.dispatchDueCampaigns();
+  const after = queueStore.summary();
+  return Math.max(0, (Number(after.sent || 0) + Number(after.failed || 0)) - (Number(before.sent || 0) + Number(before.failed || 0)));
+}
+
+function hasAutoQueueWork() {
+  return queueStore.campaigns().some((campaign) => {
+    if (!["scheduled", "running"].includes(campaign.status)) return false;
+    if (isWindowExpired(campaign)) return false;
+
+    const recipients = Number(campaign.recipients || 0);
+    const sent = Number(campaign.sent || 0);
+    const failed = Number(campaign.failed || 0);
+    return Math.max(recipients - sent - failed, 0) > 0;
+  });
 }
 
 queueCampaignList.addEventListener("click", async (event) => {
@@ -186,6 +234,7 @@ queueCampaignList.addEventListener("click", async (event) => {
       await queueStore.updateCampaignStatusAsync(button.dataset.id, "running");
       renderQueue();
       setQueueStatus("Campaign started", "ready");
+      window.setTimeout(() => { void runAutoQueue(); }, 0);
     } else if (button.dataset.action === "send-one") {
       await queueStore.manualSendOneAsync(button.dataset.id);
       renderQueue();
@@ -213,6 +262,14 @@ queueCampaignList.addEventListener("click", async (event) => {
 
 processDueQueue.addEventListener("click", processDueRecipients);
 refreshQueue.addEventListener("click", refreshQueueState);
+toggleAutoQueue.addEventListener("click", () => {
+  autoQueueEnabled = !autoQueueEnabled;
+  renderAutoQueueButton();
+  setQueueStatus(autoQueueEnabled ? "Auto queue enabled" : "Auto queue paused", autoQueueEnabled ? "ready" : "locked");
+  if (autoQueueEnabled) {
+    void runAutoQueue();
+  }
+});
 
 function nextSendLabel(campaign, plan) {
   if (campaign.status === "completed") return "Done";
@@ -333,5 +390,8 @@ function cssEscape(value) {
 }
 
 setQueueStatus("Loading queue", "pending");
+renderAutoQueueButton();
 void refreshQueueState();
+void runAutoQueue();
 setInterval(refreshQueueState, 5000);
+setInterval(runAutoQueue, 5000);
