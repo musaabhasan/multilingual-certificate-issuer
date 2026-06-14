@@ -41,6 +41,7 @@ function e(string $value): string
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php" aria-current="page">Verify</a>
+        <a href="/mfa.php">MFA</a>
         <a href="/admin.php">Admin</a>
     </nav>
 </header>

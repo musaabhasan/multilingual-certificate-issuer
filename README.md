@@ -40,7 +40,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Support case redaction | Safe evidence sharing | Redaction rules for verification tickets, delivery disputes, corrections, revocations, vendor support, and audit samples |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
-| Security | Authentication, password rotation, audit logs | First-run administrator setup, password policy fields, administrative action logging |
+| Security | Authentication, administrator MFA, password rotation, audit logs | First-run administrator setup, TOTP enrollment, hashed recovery codes, password policy fields, administrative action logging |
 | Deployment readiness | Production hosting guidance | Self-hosted deployment, MySQL encryption guidance, private storage controls |
 
 ## Repository Structure
@@ -196,6 +196,8 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Generate a 32-byte sodium key for `APP_KEY`.
 - Encrypt SMTP passwords before database storage.
 - Create the first administrator account during setup and enforce the password policy for all users.
+- Require administrator MFA enrollment before access to protected management pages.
+- Store TOTP secrets encrypted and recovery codes hashed; show recovery codes only at enrollment or regeneration.
 - Rotate passwords every 90 days.
 - Validate uploaded CSV, image, and font files by MIME type and size.
 - Remediate PDF accessibility defects before release, and reconcile any resulting PDF hash or verification changes.

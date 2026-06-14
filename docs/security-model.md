@@ -4,7 +4,7 @@
 
 | Threat | Control |
 | --- | --- |
-| Stolen administrator password | Strong password policy, password rotation, session timeout, rate limits, audit logs |
+| Stolen administrator password | Strong password policy, mandatory administrator MFA, password rotation, session timeout, rate limits, audit logs |
 | SMTP credential leakage | Sodium encryption, `.env` key separation, restricted database access |
 | CSV injection or malformed data | Header validation, row limits, formula-prefix neutralization before export |
 | Over-collected recipient personal data | Approved data dictionary, recipient data minimization audit, retention review |
@@ -27,6 +27,8 @@
 ## Authentication Requirements
 
 - Administrator accounts must use the enforced password policy.
+- Administrator accounts must enroll TOTP MFA before accessing protected management pages.
+- MFA recovery codes are shown once, stored as hashes, and consumed after use.
 - Passwords must be hashed with `password_hash`.
 - Privileged passwords rotate every 90 days.
 - Sessions expire after inactivity.
@@ -53,6 +55,7 @@ Keep `APP_KEY` outside the repository and back it up securely. If it is lost, en
 At minimum, log:
 
 - login success and failure,
+- MFA enrollment, verification, recovery-code use, and recovery-code regeneration,
 - SMTP profile create/update/test,
 - template create/update/approve/retire,
 - CSV upload and mapping,

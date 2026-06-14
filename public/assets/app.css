@@ -938,11 +938,58 @@ textarea.short-textarea {
     border: 1px solid #ffd1cc;
 }
 
+.alert.ready {
+    color: var(--green);
+    background: #eefbf3;
+    border: 1px solid #b7e2c8;
+}
+
 .form-note {
     margin: 0;
     color: var(--muted);
     font-size: 13px;
     line-height: 1.45;
+}
+
+.mfa-setup-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr);
+    gap: 14px;
+    margin: 18px 0;
+    align-items: end;
+}
+
+.secret-box {
+    display: block;
+    width: 100%;
+    margin-top: 7px;
+    padding: 12px;
+    overflow-wrap: anywhere;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.mfa-form {
+    margin-top: 16px;
+}
+
+.mfa-actions {
+    margin-top: 18px;
+}
+
+.recovery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.recovery-grid code {
+    display: block;
+    padding: 11px;
+    text-align: center;
+    font-weight: 800;
+    letter-spacing: 0;
 }
 
 .admin-grid {
@@ -954,7 +1001,8 @@ textarea.short-textarea {
     .workspace,
     .designer-layout,
     .form-grid,
-    .campaign-grid {
+    .campaign-grid,
+    .mfa-setup-grid {
         grid-template-columns: 1fr;
     }
 

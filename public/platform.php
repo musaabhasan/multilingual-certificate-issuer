@@ -8,6 +8,7 @@ use CertificateIssuer\Mail\EmailTemplateRenderer;
 use CertificateIssuer\Security\PasswordPolicy;
 use CertificateIssuer\Support\Env;
 use PHPMailer\PHPMailer\PHPMailer;
+use RobThree\Auth\TwoFactorAuth;
 
 require_once dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -356,6 +357,13 @@ function app_users_exist(): bool
 function app_sanitize_user(array $user): array
 {
     unset($user['passwordHash']);
+    $user['mfa'] = [
+        'required' => app_mfa_required($user),
+        'enabled' => app_mfa_enabled($user),
+        'verified' => app_mfa_session_verified($user),
+        'enabledAt' => (string) (app_user_mfa($user)['enabledAt'] ?? ''),
+        'recoveryCodesRemaining' => app_mfa_recovery_remaining($user),
+    ];
     return $user;
 }
 
@@ -364,7 +372,7 @@ function app_current_user(): ?array
     $timeoutSeconds = max(15, (int) (app_settings()['security']['sessionTimeoutMinutes'] ?? 120)) * 60;
     $lastActivity = (int) ($_SESSION['last_activity'] ?? time());
     if (isset($_SESSION['user_id']) && time() - $lastActivity > $timeoutSeconds) {
-        unset($_SESSION['user_id'], $_SESSION['csrf_token'], $_SESSION['last_activity']);
+        app_clear_auth_session();
         return null;
     }
     $_SESSION['last_activity'] = time();
@@ -387,6 +395,20 @@ function app_require_auth(bool $json = false): array
 {
     $user = app_current_user();
     if ($user !== null) {
+        if (app_mfa_action_required($user)) {
+            if ($json) {
+                app_json_response([
+                    'error' => 'Administrator MFA is required.',
+                    'mfaRequired' => true,
+                    'mfaEnrollmentRequired' => !app_mfa_enabled($user),
+                ], 428);
+            }
+
+            $next = rawurlencode($_SERVER['REQUEST_URI'] ?? '/');
+            header('Location: /mfa.php?next=' . $next);
+            exit;
+        }
+
         return $user;
     }
 
@@ -433,9 +455,14 @@ function app_csrf_token(): string
 function app_verify_csrf(): void
 {
     $provided = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
-    if (!is_string($provided) || !hash_equals(app_csrf_token(), $provided)) {
+    if (!app_csrf_token_is_valid($provided)) {
         app_json_response(['error' => 'Invalid CSRF token.'], 419);
     }
+}
+
+function app_csrf_token_is_valid(mixed $provided): bool
+{
+    return is_string($provided) && hash_equals(app_csrf_token(), $provided);
 }
 
 function app_create_user(string $name, string $email, string $password, string $role = 'administrator'): array
@@ -470,6 +497,14 @@ function app_create_user(string $name, string $email, string $password, string $
         'passwordChangedAt' => app_now(),
         'lastLoginAt' => '',
         'lockedAt' => '',
+        'mfa' => [
+            'secretEncrypted' => '',
+            'enabledAt' => '',
+            'pendingSecretEncrypted' => '',
+            'pendingStartedAt' => '',
+            'recoveryCodes' => [],
+            'recoveryCodesUpdatedAt' => '',
+        ],
         'createdAt' => app_now(),
         'updatedAt' => app_now(),
     ];
@@ -493,6 +528,7 @@ function app_login(string $email, string $password): array
         }
 
         session_regenerate_id(true);
+        unset($_SESSION['mfa_verified_user_id'], $_SESSION['mfa_verified_at']);
         $_SESSION['user_id'] = (string) $user['id'];
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['last_activity'] = time();
@@ -505,6 +541,291 @@ function app_login(string $email, string $password): array
 
     app_audit('auth.failed', 'user', null, ['email' => strtolower(trim($email))]);
     throw new RuntimeException('Invalid email or password.');
+}
+
+function app_clear_auth_session(): void
+{
+    unset(
+        $_SESSION['user_id'],
+        $_SESSION['csrf_token'],
+        $_SESSION['last_activity'],
+        $_SESSION['mfa_verified_user_id'],
+        $_SESSION['mfa_verified_at']
+    );
+}
+
+function app_user_mfa(array $user): array
+{
+    return is_array($user['mfa'] ?? null) ? $user['mfa'] : [];
+}
+
+function app_mfa_required(array $user): bool
+{
+    return ($user['role'] ?? '') === 'administrator';
+}
+
+function app_mfa_enabled(array $user): bool
+{
+    $mfa = app_user_mfa($user);
+    return app_mfa_required($user)
+        && (string) ($mfa['enabledAt'] ?? '') !== ''
+        && (string) ($mfa['secretEncrypted'] ?? '') !== '';
+}
+
+function app_mfa_session_verified(array $user): bool
+{
+    return app_mfa_enabled($user)
+        && (string) ($_SESSION['mfa_verified_user_id'] ?? '') === (string) ($user['id'] ?? '')
+        && !empty($_SESSION['mfa_verified_at']);
+}
+
+function app_mfa_action_required(array $user): bool
+{
+    return app_mfa_required($user) && (!app_mfa_enabled($user) || !app_mfa_session_verified($user));
+}
+
+function app_mfa_recovery_remaining(array $user): int
+{
+    $codes = app_user_mfa($user)['recoveryCodes'] ?? [];
+    if (!is_array($codes)) {
+        return 0;
+    }
+
+    return count(array_filter($codes, static fn (mixed $record): bool => is_array($record) && empty($record['usedAt'])));
+}
+
+function app_mfa_service(): TwoFactorAuth
+{
+    $issuer = (string) (app_settings()['platform']['name'] ?? 'Certificate Issuer');
+    return new TwoFactorAuth($issuer !== '' ? $issuer : 'Certificate Issuer');
+}
+
+function app_mfa_label(array $user): string
+{
+    $email = (string) ($user['email'] ?? 'administrator');
+    $issuer = (string) (app_settings()['platform']['name'] ?? 'Certificate Issuer');
+    return ($issuer !== '' ? $issuer : 'Certificate Issuer') . ':' . $email;
+}
+
+function app_find_user(string $userId): ?array
+{
+    foreach (app_users() as $user) {
+        if ((string) ($user['id'] ?? '') === $userId) {
+            return $user;
+        }
+    }
+
+    return null;
+}
+
+function app_update_user_record(string $userId, callable $callback): array
+{
+    $users = app_users();
+    foreach ($users as $index => $user) {
+        if ((string) ($user['id'] ?? '') !== $userId) {
+            continue;
+        }
+
+        $updated = $callback($user);
+        if (!is_array($updated)) {
+            throw new RuntimeException('User update failed.');
+        }
+
+        $updated['updatedAt'] = app_now();
+        $users[$index] = $updated;
+        app_save_users($users);
+        return $updated;
+    }
+
+    throw new RuntimeException('User not found.');
+}
+
+function app_mfa_start_enrollment(string $userId): array
+{
+    $secret = '';
+    $user = app_update_user_record($userId, static function (array $user) use (&$secret): array {
+        if (!app_mfa_required($user)) {
+            throw new RuntimeException('MFA enrollment is only required for administrators.');
+        }
+
+        if (app_mfa_enabled($user)) {
+            throw new RuntimeException('MFA is already enabled for this administrator.');
+        }
+
+        $mfa = app_user_mfa($user);
+        $pendingStartedAt = strtotime((string) ($mfa['pendingStartedAt'] ?? '')) ?: 0;
+        $secret = app_decrypt_secret((string) ($mfa['pendingSecretEncrypted'] ?? ''));
+        if ($secret === '' || $pendingStartedAt < time() - 3600) {
+            $secret = app_mfa_service()->createSecret(160);
+            $mfa['pendingSecretEncrypted'] = app_encrypt_secret($secret);
+            $mfa['pendingStartedAt'] = app_now();
+        }
+
+        $user['mfa'] = $mfa;
+        return $user;
+    });
+
+    return [
+        'secret' => $secret,
+        'uri' => app_mfa_service()->getQRText(app_mfa_label($user), $secret),
+        'user' => $user,
+    ];
+}
+
+function app_mfa_confirm_enrollment(string $userId, string $code): array
+{
+    $recoveryCodes = [];
+    $updated = app_update_user_record($userId, static function (array $user) use ($code, &$recoveryCodes): array {
+        if (!app_mfa_required($user)) {
+            throw new RuntimeException('MFA enrollment is only required for administrators.');
+        }
+
+        $mfa = app_user_mfa($user);
+        $secret = app_decrypt_secret((string) ($mfa['pendingSecretEncrypted'] ?? ''));
+        if ($secret === '') {
+            throw new RuntimeException('Start MFA enrollment before confirming it.');
+        }
+
+        if (!app_mfa_verify_totp($secret, $code)) {
+            throw new RuntimeException('The authenticator code is invalid.');
+        }
+
+        $recoveryCodes = app_mfa_generate_recovery_codes();
+        $user['mfa'] = [
+            'secretEncrypted' => app_encrypt_secret($secret),
+            'enabledAt' => app_now(),
+            'pendingSecretEncrypted' => '',
+            'pendingStartedAt' => '',
+            'recoveryCodes' => app_mfa_hash_recovery_codes($recoveryCodes),
+            'recoveryCodesUpdatedAt' => app_now(),
+            'lastVerifiedAt' => app_now(),
+        ];
+        return $user;
+    });
+
+    app_audit('mfa.enabled', 'user', $userId);
+    return ['user' => $updated, 'recoveryCodes' => $recoveryCodes];
+}
+
+function app_mfa_verify_challenge(string $userId, string $code): array
+{
+    $user = app_find_user($userId);
+    if ($user === null || !app_mfa_enabled($user)) {
+        throw new RuntimeException('MFA is not enabled for this administrator.');
+    }
+
+    $secret = app_decrypt_secret((string) (app_user_mfa($user)['secretEncrypted'] ?? ''));
+    if ($secret !== '' && app_mfa_verify_totp($secret, $code)) {
+        $updated = app_update_user_record($userId, static function (array $user): array {
+            $mfa = app_user_mfa($user);
+            $mfa['lastVerifiedAt'] = app_now();
+            $user['mfa'] = $mfa;
+            return $user;
+        });
+        return ['method' => 'totp', 'user' => $updated];
+    }
+
+    $normalized = app_mfa_normalize_recovery_code($code);
+    if ($normalized === '') {
+        throw new RuntimeException('The authenticator or recovery code is invalid.');
+    }
+
+    $matched = false;
+    $updated = app_update_user_record($userId, static function (array $user) use ($normalized, &$matched): array {
+        $mfa = app_user_mfa($user);
+        $codes = is_array($mfa['recoveryCodes'] ?? null) ? $mfa['recoveryCodes'] : [];
+
+        foreach ($codes as $index => $record) {
+            if (!is_array($record) || !empty($record['usedAt'])) {
+                continue;
+            }
+
+            if (password_verify($normalized, (string) ($record['hash'] ?? ''))) {
+                $codes[$index]['usedAt'] = app_now();
+                $matched = true;
+                break;
+            }
+        }
+
+        if (!$matched) {
+            throw new RuntimeException('The authenticator or recovery code is invalid.');
+        }
+
+        $mfa['recoveryCodes'] = $codes;
+        $mfa['lastVerifiedAt'] = app_now();
+        $user['mfa'] = $mfa;
+        return $user;
+    });
+
+    app_audit('mfa.recovery_used', 'user', $userId);
+    return ['method' => 'recovery', 'user' => $updated];
+}
+
+function app_mfa_regenerate_recovery_codes(string $userId, string $code): array
+{
+    $user = app_find_user($userId);
+    if ($user === null || !app_mfa_enabled($user)) {
+        throw new RuntimeException('MFA is not enabled for this administrator.');
+    }
+
+    $secret = app_decrypt_secret((string) (app_user_mfa($user)['secretEncrypted'] ?? ''));
+    if ($secret === '' || !app_mfa_verify_totp($secret, $code)) {
+        throw new RuntimeException('Enter a current authenticator code to regenerate recovery codes.');
+    }
+
+    $recoveryCodes = app_mfa_generate_recovery_codes();
+    app_update_user_record($userId, static function (array $user) use ($recoveryCodes): array {
+        $mfa = app_user_mfa($user);
+        $mfa['recoveryCodes'] = app_mfa_hash_recovery_codes($recoveryCodes);
+        $mfa['recoveryCodesUpdatedAt'] = app_now();
+        $user['mfa'] = $mfa;
+        return $user;
+    });
+
+    app_audit('mfa.recovery_regenerated', 'user', $userId);
+    return $recoveryCodes;
+}
+
+function app_mfa_verify_totp(string $secret, string $code): bool
+{
+    $digits = preg_replace('/\D+/', '', $code) ?? '';
+    if (strlen($digits) !== 6) {
+        return false;
+    }
+
+    return app_mfa_service()->verifyCode($secret, $digits, 1);
+}
+
+function app_mfa_generate_recovery_codes(int $count = 10): array
+{
+    $codes = [];
+    for ($index = 0; $index < $count; $index++) {
+        $codes[] = strtoupper(implode('-', str_split(bin2hex(random_bytes(6)), 4)));
+    }
+
+    return $codes;
+}
+
+function app_mfa_hash_recovery_codes(array $codes): array
+{
+    return array_map(static fn (string $code): array => [
+        'hash' => password_hash(app_mfa_normalize_recovery_code($code), PASSWORD_DEFAULT),
+        'createdAt' => app_now(),
+        'usedAt' => '',
+    ], $codes);
+}
+
+function app_mfa_normalize_recovery_code(string $code): string
+{
+    return strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', $code) ?? '');
+}
+
+function app_mfa_mark_verified(array $user, string $method): void
+{
+    $_SESSION['mfa_verified_user_id'] = (string) ($user['id'] ?? '');
+    $_SESSION['mfa_verified_at'] = time();
+    $_SESSION['last_activity'] = time();
+    app_audit('mfa.verified', 'user', (string) ($user['id'] ?? ''), ['method' => $method]);
 }
 
 function app_change_password(string $userId, string $currentPassword, string $newPassword): void

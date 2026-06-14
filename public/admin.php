@@ -29,6 +29,7 @@ function e(string $value): string
         <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
+        <a href="/mfa.php">MFA</a>
         <a href="/admin.php" aria-current="page">Admin</a>
         <a href="/logout.php">Logout</a>
     </nav>
@@ -120,6 +121,17 @@ function e(string $value): string
                     <label>New password <input id="newPassword" type="password" required autocomplete="new-password"></label>
                     <button type="submit">Change password</button>
                 </form>
+            </article>
+
+            <article class="panel">
+                <div class="panel-header">
+                    <h2>Account MFA</h2>
+                    <span class="status ready">Enabled</span>
+                </div>
+                <p>Manage administrator MFA verification and recovery codes for your account.</p>
+                <div class="action-row mfa-actions">
+                    <a class="button" href="/mfa.php">Manage MFA</a>
+                </div>
             </article>
 
             <article class="panel span-2">

@@ -1,5 +1,6 @@
 (function () {
   const loginPath = "/login.php";
+  const mfaPath = "/mfa.php";
 
   function requestSession() {
     const xhr = new XMLHttpRequest();
@@ -17,9 +18,18 @@
     window.location.replace(`${loginPath}?next=${encodeURIComponent(next)}`);
   }
 
+  function redirectToMfa() {
+    const next = window.location.pathname + window.location.search;
+    window.location.replace(`${mfaPath}?next=${encodeURIComponent(next)}`);
+  }
+
   let session = requestSession();
   if (session.setupRequired || !session.authenticated) {
     redirectToLogin();
+    return;
+  }
+  if (session.mfaRequired) {
+    redirectToMfa();
     return;
   }
 
@@ -43,6 +53,10 @@
     xhr.send(method === "GET" ? null : JSON.stringify(payload || {}));
 
     const response = JSON.parse(xhr.responseText || "{}");
+    if (xhr.status === 428 || response.mfaRequired) {
+      redirectToMfa();
+      throw new Error(response.error || "Administrator MFA is required.");
+    }
     if (xhr.status === 401 || xhr.status === 419) {
       redirectToLogin();
       throw new Error(response.error || "Session expired.");
@@ -70,6 +84,10 @@
 
     const response = await fetch(`/api.php?action=${encodeURIComponent(action)}`, options);
     const data = await response.json().catch(() => ({}));
+    if (response.status === 428 || data.mfaRequired) {
+      redirectToMfa();
+      throw new Error(data.error || "Administrator MFA is required.");
+    }
     if (response.status === 401 || response.status === 419) {
       redirectToLogin();
       throw new Error(data.error || "Session expired.");

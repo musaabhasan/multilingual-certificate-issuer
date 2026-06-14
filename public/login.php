@@ -33,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'administrator'
             );
             session_regenerate_id(true);
+            unset($_SESSION['mfa_verified_user_id'], $_SESSION['mfa_verified_at']);
             $_SESSION['user_id'] = (string) $user['id'];
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             $_SESSION['last_activity'] = time();

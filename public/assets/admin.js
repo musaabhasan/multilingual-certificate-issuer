@@ -76,10 +76,18 @@ async function loadUsers() {
         <strong>${escapeHtml(user.name)}</strong>
         <span>${escapeHtml(user.email)} · ${escapeHtml(user.role)}${user.lastLoginAt ? ` · Last login ${escapeHtml(shortDate(user.lastLoginAt))}` : ""}</span>
       </div>
-      <span class="status ready">Active</span>
+      <span class="status ${user.role === "administrator" && !user.mfa?.enabled ? "warning" : "ready"}">${escapeHtml(userStatusLabel(user))}</span>
     </div>
   `).join("") || "<p>No users found.</p>";
   setStatus(usersStatus, `${users.length} users`, "ready");
+}
+
+function userStatusLabel(user) {
+  if (user.lockedAt) return "Locked";
+  if (user.role === "administrator") {
+    return user.mfa?.enabled ? "MFA enabled" : "MFA pending";
+  }
+  return "Active";
 }
 
 async function createUser(event) {

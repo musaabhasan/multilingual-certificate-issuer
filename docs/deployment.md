@@ -74,7 +74,7 @@ Set `QUEUE_STALE_PROCESSING_MINUTES` to the longest expected SMTP delivery windo
 ## Go-Live Checklist
 
 - HTTPS configured.
-- Administrator setup and password policy tested.
+- Administrator setup, password policy, and MFA enrollment tested.
 - SMTP test message sent.
 - Arabic PDF rendering verified.
 - English PDF rendering verified.

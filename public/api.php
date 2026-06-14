@@ -14,6 +14,9 @@ try {
             'authenticated' => $user !== null,
             'setupRequired' => !app_users_exist(),
             'user' => $user !== null ? app_sanitize_user($user) : null,
+            'mfaRequired' => $user !== null && app_mfa_action_required($user),
+            'mfaEnrollmentRequired' => $user !== null && app_mfa_required($user) && !app_mfa_enabled($user),
+            'mfaVerified' => $user !== null && app_mfa_session_verified($user),
             'csrf' => app_csrf_token(),
         ]);
     }
