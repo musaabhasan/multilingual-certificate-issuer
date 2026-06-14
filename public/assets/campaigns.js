@@ -45,6 +45,7 @@ let lastCampaignTemplateUpload = null;
 const recipientFilters = new Map();
 const expandedCampaigns = new Set();
 const csvEditors = new Set();
+let activeEmailSurface = null;
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -251,7 +252,7 @@ function renderCampaigns() {
             <input data-email-subject="${escapeHtml(campaign.id)}" type="text" value="${escapeAttribute(campaign.emailSubject)}">
           </label>
           <label>Email body
-            <textarea data-email-body="${escapeHtml(campaign.id)}" class="short-textarea">${escapeHtml(campaign.emailBodyHtml)}</textarea>
+            <textarea data-email-body="${escapeHtml(campaign.id)}" class="short-textarea email-body-input">${escapeHtml(campaign.emailBodyHtml)}</textarea>
           </label>
           <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
           <button type="button" data-action="save-email" data-id="${escapeHtml(campaign.id)}">Save email</button>
@@ -274,10 +275,12 @@ function renderCampaigns() {
       </article>
     `;
   }).join("");
+  enhanceEmailEditors(campaignList);
 }
 
 campaignForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  syncEmailEditors(campaignForm);
   const name = document.querySelector("#campaignName").value.trim();
   if (!name) return;
 
@@ -468,6 +471,7 @@ campaignList.addEventListener("click", async (event) => {
       render();
       setCampaignLaneStatus("Campaign template updated", "ready");
     } else if (button.dataset.action === "save-email") {
+      syncEmailEditors(campaignList);
       const subject = document.querySelector(`[data-email-subject="${cssEscape(button.dataset.id)}"]`)?.value.trim();
       const body = document.querySelector(`[data-email-body="${cssEscape(button.dataset.id)}"]`)?.value.trim();
       store.updateCampaign(button.dataset.id, {
@@ -574,6 +578,41 @@ campaignList.addEventListener("change", async (event) => {
   }
 });
 
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-rich-command], [data-rich-action], [data-rich-token]");
+  if (!button) return;
+
+  const editor = button.closest(".rich-editor");
+  if (!editor) return;
+
+  event.preventDefault();
+  handleRichEditorButton(editor, button);
+});
+
+document.addEventListener("input", (event) => {
+  const surface = event.target.closest?.(".rich-editor-surface");
+  if (surface) {
+    syncRichSurface(surface);
+    return;
+  }
+
+  const source = event.target.closest?.(".rich-editor-source");
+  if (source) {
+    const editor = source.closest(".rich-editor");
+    const surfaceElement = editor?.querySelector(".rich-editor-surface");
+    if (surfaceElement) {
+      surfaceElement.innerHTML = source.value;
+    }
+  }
+});
+
+document.addEventListener("focusin", (event) => {
+  const surface = event.target.closest?.(".rich-editor-surface");
+  if (surface) {
+    activeEmailSurface = surface;
+  }
+});
+
 ["campaignStart", "campaignEnd", "campaignRandomUnit", "campaignRandomMin", "campaignRandomMax"].forEach((id) => {
   document.querySelector(`#${id}`).addEventListener("input", renderPlanPreview);
 });
@@ -603,9 +642,7 @@ document.querySelectorAll("[data-delay-preset-unit]").forEach((button) => {
 
 document.querySelectorAll("[data-email-token]").forEach((button) => {
   button.addEventListener("click", () => {
-    const active = document.activeElement;
-    const target = active === campaignEmailSubject || active === campaignEmailBody ? active : campaignEmailBody;
-    insertAtCursor(target, button.dataset.emailToken);
+    insertEmailToken(button.dataset.emailToken);
   });
 });
 
@@ -614,6 +651,7 @@ function render() {
   renderTemplateMode();
   renderMetrics();
   renderCampaigns();
+  enhanceEmailEditors(document);
   renderPlanPreview();
 }
 
@@ -908,6 +946,169 @@ function insertAtCursor(target, token) {
   const cursor = start + token.length;
   target.focus();
   target.setSelectionRange(cursor, cursor);
+}
+
+function enhanceEmailEditors(root = document) {
+  root.querySelectorAll("textarea.email-body-input:not([data-rich-enhanced])").forEach((textarea) => {
+    textarea.dataset.richEnhanced = "true";
+    textarea.classList.add("rich-editor-source");
+    textarea.hidden = true;
+
+    const editor = document.createElement("div");
+    editor.className = "rich-editor";
+    editor.innerHTML = `
+      <div class="rich-editor-toolbar" aria-label="Email formatting toolbar">
+        <button type="button" data-rich-command="bold" title="Bold"><strong>B</strong></button>
+        <button type="button" data-rich-command="italic" title="Italic"><em>I</em></button>
+        <button type="button" data-rich-command="underline" title="Underline"><span class="underline-command">U</span></button>
+        <button type="button" data-rich-command="insertUnorderedList" title="Bullet list">List</button>
+        <button type="button" data-rich-command="insertOrderedList" title="Numbered list">1.</button>
+        <button type="button" data-rich-command="createLink" title="Insert link">Link</button>
+        <button type="button" data-rich-command="removeFormat" title="Clear formatting">Clear</button>
+        <span class="rich-editor-divider"></span>
+        <button type="button" data-rich-token="{{name_en}}">name_en</button>
+        <button type="button" data-rich-token="{{name_ar}}">name_ar</button>
+        <button type="button" data-rich-token="{{program_en}}">program_en</button>
+        <button type="button" data-rich-token="{{certificate_number}}">certificate_number</button>
+        <button type="button" data-rich-token="{{verification_url}}">verification_url</button>
+        <span class="rich-editor-divider"></span>
+        <button type="button" data-rich-action="toggle-source">HTML</button>
+      </div>
+      <div class="rich-editor-surface" contenteditable="true" role="textbox" aria-multiline="true"></div>
+    `;
+
+    const surface = editor.querySelector(".rich-editor-surface");
+    surface.innerHTML = textarea.value || defaultEmailBody();
+    textarea.parentNode.insertBefore(editor, textarea);
+    editor.appendChild(textarea);
+    syncRichSurface(surface);
+  });
+}
+
+function handleRichEditorButton(editor, button) {
+  const surface = editor.querySelector(".rich-editor-surface");
+  const source = editor.querySelector(".rich-editor-source");
+  if (!surface || !source) return;
+
+  if (button.dataset.richAction === "toggle-source") {
+    toggleRichEditorSource(editor, button);
+    return;
+  }
+
+  if (button.dataset.richToken) {
+    insertIntoRichEditor(surface, button.dataset.richToken);
+    return;
+  }
+
+  const command = button.dataset.richCommand;
+  if (!command) return;
+
+  if (!source.hidden) {
+    surface.innerHTML = source.value;
+    toggleRichEditorSource(editor, editor.querySelector("[data-rich-action='toggle-source']"));
+  }
+
+  surface.focus();
+  activeEmailSurface = surface;
+
+  if (command === "createLink") {
+    const url = window.prompt("Enter the link URL");
+    if (!url) return;
+    const safeUrl = normalizeEmailLink(url);
+    if (window.getSelection()?.toString()) {
+      document.execCommand("createLink", false, safeUrl);
+    } else {
+      document.execCommand("insertHTML", false, `<a href="${escapeAttribute(safeUrl)}">${escapeHtml(safeUrl)}</a>`);
+    }
+  } else {
+    document.execCommand(command, false, null);
+  }
+
+  syncRichSurface(surface);
+}
+
+function toggleRichEditorSource(editor, button) {
+  const surface = editor.querySelector(".rich-editor-surface");
+  const source = editor.querySelector(".rich-editor-source");
+  if (!surface || !source) return;
+
+  if (source.hidden) {
+    source.value = surface.innerHTML.trim();
+    source.hidden = false;
+    surface.hidden = true;
+    editor.classList.add("source-mode");
+    if (button) button.textContent = "Visual";
+    source.focus();
+  } else {
+    surface.innerHTML = source.value || defaultEmailBody();
+    source.hidden = true;
+    surface.hidden = false;
+    editor.classList.remove("source-mode");
+    if (button) button.textContent = "HTML";
+    surface.focus();
+    syncRichSurface(surface);
+  }
+}
+
+function syncEmailEditors(root = document) {
+  root.querySelectorAll(".rich-editor").forEach((editor) => {
+    const surface = editor.querySelector(".rich-editor-surface");
+    const source = editor.querySelector(".rich-editor-source");
+    if (!surface || !source) return;
+
+    if (source.hidden) {
+      source.value = surface.innerHTML.trim();
+    } else {
+      surface.innerHTML = source.value;
+    }
+  });
+}
+
+function syncRichSurface(surface) {
+  const editor = surface.closest(".rich-editor");
+  const source = editor?.querySelector(".rich-editor-source");
+  if (source && source.hidden) {
+    source.value = surface.innerHTML.trim();
+  }
+}
+
+function insertEmailToken(token) {
+  const active = document.activeElement;
+  if (active === campaignEmailSubject) {
+    insertAtCursor(campaignEmailSubject, token);
+    return;
+  }
+
+  const rememberedSurface = activeEmailSurface && document.body.contains(activeEmailSurface) ? activeEmailSurface : null;
+  const surface = active?.closest?.(".rich-editor-surface") || rememberedSurface || document.querySelector("#campaignEmailBody")?.closest(".rich-editor")?.querySelector(".rich-editor-surface");
+  if (surface) {
+    insertIntoRichEditor(surface, token);
+  }
+}
+
+function insertIntoRichEditor(surface, value) {
+  surface.hidden = false;
+  const editor = surface.closest(".rich-editor");
+  const source = editor?.querySelector(".rich-editor-source");
+  const toggle = editor?.querySelector("[data-rich-action='toggle-source']");
+  if (source && !source.hidden) {
+    toggleRichEditorSource(editor, toggle);
+  }
+
+  surface.focus();
+  activeEmailSurface = surface;
+  document.execCommand("insertText", false, value);
+  syncRichSurface(surface);
+}
+
+function normalizeEmailLink(url) {
+  const trimmed = String(url || "").trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function defaultEmailBody() {
+  return '<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p><p>Verification link: <a href="{{verification_url}}">{{verification_url}}</a></p>';
 }
 
 function renderTemplateMode() {
