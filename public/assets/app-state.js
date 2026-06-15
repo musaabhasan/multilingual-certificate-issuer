@@ -264,8 +264,8 @@
     return record.name_en || record.name_ar || record.full_name || record.name || record.email || record.unique_identifier || "Recipient";
   }
 
-  function normalizeRecipientQueueRecord(record, index) {
-    const data = record.data && typeof record.data === "object" ? record.data : record;
+  function normalizeRecipientQueueRecord(record, index, fieldMap = {}) {
+    const data = applyFieldMapToRecord(record, fieldMap);
     const status = ["queued", "rendered", "sent", "failed", "skipped"].includes(record.status) ? record.status : "queued";
     const identifier = data.unique_identifier || data.certificate_id || data.id || data.email || `recipient-${index + 1}`;
 
@@ -291,8 +291,42 @@
     };
   }
 
-  function buildRecipientQueue(records) {
-    return (Array.isArray(records) ? records : []).map(normalizeRecipientQueueRecord);
+  function buildRecipientQueue(records, fieldMap = {}) {
+    const normalizedMap = normalizeFieldMap(fieldMap);
+    return (Array.isArray(records) ? records : []).map((record, index) => normalizeRecipientQueueRecord(record, index, normalizedMap));
+  }
+
+  function applyFieldMapToRecord(record, fieldMap = {}) {
+    const data = record.data && typeof record.data === "object" ? { ...record.data } : { ...record };
+    const normalizedMap = normalizeFieldMap(fieldMap);
+
+    Object.entries(normalizedMap).forEach(([target, source]) => {
+      if (source && Object.prototype.hasOwnProperty.call(data, source)) {
+        data[target] = data[source];
+      }
+    });
+
+    if (data.unique_identifier && !data.certificate_number) {
+      data.certificate_number = data.unique_identifier;
+    }
+
+    return data;
+  }
+
+  function normalizeFieldMap(fieldMap = {}) {
+    return {
+      email: String(fieldMap.email || "").trim(),
+      unique_identifier: String(fieldMap.unique_identifier || "").trim(),
+      name_en: String(fieldMap.name_en || "").trim(),
+      name_ar: String(fieldMap.name_ar || "").trim()
+    };
+  }
+
+  function importLabels(headers = [], fieldMap = {}) {
+    const canonicalLabels = Object.entries(normalizeFieldMap(fieldMap))
+      .filter(([, source]) => source !== "")
+      .map(([target]) => target);
+    return [...new Set([...(Array.isArray(headers) ? headers : []), ...canonicalLabels])];
   }
 
   function queueCounts(queue) {
@@ -371,6 +405,7 @@
       templateSource: campaign.templateSource || "saved_template",
       templateFileName: campaign.templateFileName || "",
       campaignTemplateName: campaign.campaignTemplateName || "",
+      csvFieldMap: normalizeFieldMap(campaign.csvFieldMap || campaign.fieldMap || {}),
       emailSubject: campaign.emailSubject || "Your certificate is ready",
       emailBodyHtml: campaign.emailBodyHtml || "<p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p>",
       includeVerificationLink: Boolean(campaign.includeVerificationLink),
@@ -487,12 +522,14 @@
 
   function withImportBatch(campaign, importBatch) {
     if (!importBatch) return campaign;
-    const recipientQueue = buildRecipientQueue(importBatch.records);
+    const fieldMap = normalizeFieldMap(importBatch.fieldMap || {});
+    const recipientQueue = buildRecipientQueue(importBatch.records, fieldMap);
 
     return {
       ...campaign,
       status: importBatch.status || campaign.status,
-      labels: importBatch.headers,
+      labels: importLabels(importBatch.headers, fieldMap),
+      csvFieldMap: fieldMap,
       recipients: recipientQueue.length,
       rendered: 0,
       sent: 0,

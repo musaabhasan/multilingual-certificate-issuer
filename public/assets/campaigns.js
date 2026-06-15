@@ -34,7 +34,19 @@ const wizardNext = document.querySelector("#wizardNext");
 const wizardCreate = document.querySelector("#wizardCreate");
 const wizardStepOrder = ["csv", "design", "sending", "review"];
 
-const requiredLabels = ["unique_identifier", "email", "name_en"];
+const csvCoreFields = [
+  { key: "email", label: "Email address", role: "Recipient email", required: true },
+  { key: "unique_identifier", label: "Unique identifier", role: "Certificate id", required: true },
+  { key: "name_en", label: "Recipient name", role: "Primary certificate name", required: true },
+  { key: "name_ar", label: "Arabic name", role: "Arabic certificate name", required: false }
+];
+const requiredMappedFields = csvCoreFields.filter((field) => field.required).map((field) => field.key);
+const csvFieldAliases = {
+  email: ["email", "email_address", "recipient_email", "mail", "e_mail", "recipient_mail"],
+  unique_identifier: ["unique_identifier", "certificate_number", "certificate_id", "certificate_no", "id", "identifier", "recipient_id", "student_id", "employee_id", "serial"],
+  name_en: ["name_en", "recipient_name", "full_name", "name", "english_name", "name_english", "participant_name", "student_name", "employee_name"],
+  name_ar: ["name_ar", "recipient_name_ar", "arabic_name", "name_arabic", "full_name_ar", "participant_name_ar", "student_name_ar"]
+};
 const labelRoles = {
   unique_identifier: "Certificate id",
   email: "Recipient email",
@@ -164,9 +176,18 @@ function validateWizardStep(step) {
       throw new Error("Upload a recipient CSV before continuing.");
     }
 
-    const missing = missingLabels(lastCampaignImport.headers);
+    const missing = missingLabels(lastCampaignImport);
     if (missing.length > 0) {
-      throw new Error(`CSV is missing required labels: ${missing.join(", ")}.`);
+      throw new Error(`Map the required CSV fields before continuing: ${missing.join(", ")}.`);
+    }
+
+    const rowIssues = requiredMappedRowIssues(lastCampaignImport);
+    if (rowIssues.missingRows > 0) {
+      throw new Error(`${rowIssues.missingRows} recipient row${rowIssues.missingRows === 1 ? "" : "s"} are missing required mapped values.`);
+    }
+
+    if (rowIssues.invalidEmails > 0) {
+      throw new Error(`${rowIssues.invalidEmails} recipient row${rowIssues.invalidEmails === 1 ? " has" : "s have"} an invalid email address.`);
     }
   }
 
@@ -859,6 +880,21 @@ campaignCsvFile.addEventListener("change", async () => {
   renderPlanPreview();
 });
 
+campaignCsvMapping.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-csv-field-map]");
+  if (!select || !lastCampaignImport) return;
+
+  lastCampaignImport.fieldMap = {
+    ...normalizeFieldMap(lastCampaignImport.fieldMap),
+    [select.dataset.csvFieldMap]: select.value
+  };
+  renderMapping(lastCampaignImport.headers, lastCampaignImport.records, lastCampaignImport.fieldMap);
+  renderPreview(lastCampaignImport.headers, lastCampaignImport.records, lastCampaignImport.fieldMap);
+  updateCsvMappingStatus(lastCampaignImport);
+  renderWizardReviewSummary();
+  renderPlanPreview();
+});
+
 campaignTemplateMode.addEventListener("change", () => {
   renderTemplateMode();
   renderWizardTemplatePreview();
@@ -904,7 +940,17 @@ campaignList.addEventListener("change", async (event) => {
 
     setCampaignLaneStatus("Replacing campaign CSV", "pending");
     try {
+      const campaign = store.findCampaign(csvInput.dataset.csvUpload);
       const importBatch = await parseCampaignCsvFile(file);
+      importBatch.fieldMap = mapForHeaders(importBatch.headers, campaign?.csvFieldMap || null);
+      const missing = missingLabels(importBatch);
+      if (missing.length > 0) {
+        throw new Error(`Map the required CSV fields before attaching this file: ${missing.join(", ")}.`);
+      }
+      const rowIssues = requiredMappedRowIssues(importBatch);
+      if (rowIssues.missingRows > 0 || rowIssues.invalidEmails > 0) {
+        throw new Error(csvRowIssueMessage(rowIssues));
+      }
       const updated = store.attachImportToCampaign(csvInput.dataset.csvUpload, importBatch);
       render();
       setCampaignLaneStatus(`Attached ${importBatch.records.length} recipients to ${updated?.name || "campaign"}`, "ready");
@@ -1804,9 +1850,10 @@ function resetCampaignCsvPreview() {
   campaignCsvRows.textContent = "0";
   campaignCsvLabels.textContent = "0";
   campaignCsvMapping.innerHTML = `
-    <tr><td><code>email</code></td><td>Recipient email</td><td><span class="pill sent">Required</span></td></tr>
-    <tr><td><code>name_en</code></td><td>English name</td><td><span class="pill sent">Required</span></td></tr>
-    <tr><td><code>unique_identifier</code></td><td>Certificate id</td><td><span class="pill queued">Recommended</span></td></tr>
+    <tr><td>Email address</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+    <tr><td>Unique identifier</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+    <tr><td>Recipient name</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+    <tr><td>Arabic name</td><td>Optional</td><td><span class="pill queued">Optional</span></td></tr>
   `;
   campaignCsvPreview.innerHTML = '<thead><tr><th>Preview</th><th>Status</th></tr></thead><tbody><tr><td>Select a CSV to preview the first rows.</td><td><span class="pill queued">Waiting</span></td></tr></tbody>';
 }
@@ -1816,20 +1863,18 @@ async function importCampaignCsv(file) {
   setCsvStatus("Reading CSV", "status pending");
 
   const { headers, records } = await parseCampaignCsvFile(file);
-  const missing = missingLabels(headers);
+  const fieldMap = inferFieldMap(headers);
 
-  lastCampaignImport = { fileName: file.name, headers, records };
+  lastCampaignImport = { fileName: file.name, headers, records, fieldMap };
   campaignCsvRows.textContent = String(records.length);
   campaignCsvLabels.textContent = String(headers.length);
-  renderMapping(headers, records);
-  renderPreview(headers, records);
+  renderMapping(headers, records, fieldMap);
+  renderPreview(headers, records, fieldMap);
 
   if (records.length === 0) {
     setCsvStatus("No recipient rows", "status failed");
-  } else if (missing.length > 0) {
-    setCsvStatus(`Missing ${missing.join(", ")}`, "status warning");
   } else {
-    setCsvStatus("CSV ready for this campaign", "status ready");
+    updateCsvMappingStatus(lastCampaignImport);
   }
 
   renderWizardReviewSummary();
@@ -1972,9 +2017,14 @@ function saveEditedCampaignCsv(campaignId) {
     status: campaign.status === "completed" ? "draft" : (campaign.status === "running" ? "paused" : campaign.status),
     message: `CSV data edited in the campaign editor.`
   };
-  const missing = missingLabels(importBatch.headers);
+  importBatch.fieldMap = mapForHeaders(importBatch.headers, campaign.csvFieldMap || null);
+  const missing = missingLabels(importBatch);
   if (missing.length > 0) {
-    throw new Error(`CSV is missing required labels: ${missing.join(", ")}.`);
+    throw new Error(`Map the required CSV fields before saving: ${missing.join(", ")}.`);
+  }
+  const rowIssues = requiredMappedRowIssues(importBatch);
+  if (rowIssues.missingRows > 0 || rowIssues.invalidEmails > 0) {
+    throw new Error(csvRowIssueMessage(rowIssues));
   }
 
   store.attachImportToCampaign(campaignId, importBatch);
@@ -2003,18 +2053,30 @@ function normalizeHeader(header, index) {
   return cleaned || `unnamed_label_${index + 1}`;
 }
 
-function renderMapping(headers, records) {
-  campaignCsvMapping.innerHTML = headers.map((header) => `
+function renderMapping(headers, records, fieldMap = {}) {
+  const normalizedMap = normalizeFieldMap(fieldMap);
+  campaignCsvMapping.innerHTML = csvCoreFields.map((field) => `
     <tr>
-      <td><code>${escapeHtml(header)}</code></td>
-      <td>${escapeHtml(roleFor(header))}</td>
-      <td>${pillFor(validationFor(header, records))}</td>
+      <td>
+        <strong>${escapeHtml(field.label)}</strong>
+        <small>${escapeHtml(field.role)}${field.required ? " - required" : " - optional"}</small>
+      </td>
+      <td>
+        <select data-csv-field-map="${escapeHtml(field.key)}">
+          <option value="">${field.required ? "Select CSV column" : "Not used"}</option>
+          ${headers.map((header) => `
+            <option value="${escapeAttribute(header)}" ${normalizedMap[field.key] === header ? "selected" : ""}>${escapeHtml(header)}</option>
+          `).join("")}
+        </select>
+      </td>
+      <td>${pillFor(mappingValidationFor(field, records, normalizedMap))}</td>
     </tr>
   `).join("");
 }
 
-function renderPreview(headers, records) {
+function renderPreview(headers, records, fieldMap = {}) {
   const rowsToShow = records.slice(0, 8);
+  const normalizedMap = normalizeFieldMap(fieldMap);
   campaignCsvPreview.innerHTML = `
     <thead>
       <tr>${headers.slice(0, 8).map((header) => `<th>${escapeHtml(header)}</th>`).join("")}<th>Status</th></tr>
@@ -2023,15 +2085,33 @@ function renderPreview(headers, records) {
       ${rowsToShow.map((record) => `
         <tr>
           ${headers.slice(0, 8).map((header) => `<td${header.endsWith("_ar") ? " dir=\"rtl\"" : ""}>${escapeHtml(record[header])}</td>`).join("")}
-          <td>${pillFor(rowStatus(record))}</td>
+          <td>${pillFor(rowStatus(record, normalizedMap))}</td>
         </tr>
       `).join("")}
     </tbody>
   `;
 }
 
+function mappingValidationFor(field, records, fieldMap) {
+  const source = fieldMap[field.key] || "";
+  if (!source) return field.required ? "Select field" : "Optional";
+
+  const blankRows = records.filter((record) => mappedValue(record, fieldMap, field.key) === "").length;
+  if (blankRows > 0 && field.required) return `${blankRows} blank`;
+
+  if (field.key === "email") {
+    const invalidRows = records.filter((record) => {
+      const email = mappedValue(record, fieldMap, "email");
+      return email !== "" && !isValidEmail(email);
+    }).length;
+    if (invalidRows > 0) return `${invalidRows} invalid`;
+  }
+
+  return "Mapped";
+}
+
 function validationFor(header, records) {
-  if (requiredLabels.includes(header)) return "Required";
+  if (csvCoreFields.some((field) => field.key === header && field.required)) return "Required";
   if (header === "name_ar" || header.endsWith("_ar")) return "RTL";
   if (header === "issue_date" || header.endsWith("_date")) return "Date";
   if (records.some((record) => /^[=+\-@]/.test(record[header] || ""))) return "Formula check";
@@ -2045,16 +2125,117 @@ function roleFor(header) {
   return "Custom data";
 }
 
-function rowStatus(record) {
-  return requiredLabels.every((header) => (record[header] || "").trim() !== "") ? "Accepted" : "Missing data";
+function rowStatus(record, fieldMap = {}) {
+  const missing = requiredMappedFields.filter((field) => mappedValue(record, fieldMap, field) === "");
+  if (missing.length > 0) return `Missing ${missing.map(fieldLabel).join(", ")}`;
+
+  const email = mappedValue(record, fieldMap, "email");
+  if (!isValidEmail(email)) return "Invalid email";
+
+  return "Accepted";
 }
 
-function missingLabels(headers) {
-  return requiredLabels.filter((header) => !headers.includes(header));
+function missingLabels(importBatch) {
+  const fieldMap = normalizeFieldMap(importBatch?.fieldMap || {});
+  return requiredMappedFields
+    .filter((field) => !fieldMap[field])
+    .map(fieldLabel);
+}
+
+function requiredMappedRowIssues(importBatch) {
+  const records = Array.isArray(importBatch?.records) ? importBatch.records : [];
+  const fieldMap = normalizeFieldMap(importBatch?.fieldMap || {});
+  const missingRows = records.filter((record) => requiredMappedFields.some((field) => mappedValue(record, fieldMap, field) === "")).length;
+  const invalidEmails = records.filter((record) => {
+    const email = mappedValue(record, fieldMap, "email");
+    return email !== "" && !isValidEmail(email);
+  }).length;
+
+  return { missingRows, invalidEmails };
+}
+
+function csvRowIssueMessage(rowIssues) {
+  if (rowIssues.missingRows > 0) {
+    return `${rowIssues.missingRows} recipient row${rowIssues.missingRows === 1 ? "" : "s"} are missing required mapped values.`;
+  }
+
+  return `${rowIssues.invalidEmails} recipient row${rowIssues.invalidEmails === 1 ? " has" : "s have"} an invalid email address.`;
+}
+
+function updateCsvMappingStatus(importBatch) {
+  const missing = missingLabels(importBatch);
+  const rowIssues = requiredMappedRowIssues(importBatch);
+
+  if (missing.length > 0) {
+    setCsvStatus(`Map ${missing.join(", ")}`, "status warning");
+  } else if (rowIssues.missingRows > 0) {
+    setCsvStatus(`${rowIssues.missingRows} rows need mapped values`, "status warning");
+  } else if (rowIssues.invalidEmails > 0) {
+    setCsvStatus(`${rowIssues.invalidEmails} invalid email addresses`, "status warning");
+  } else {
+    setCsvStatus("CSV mapping ready for this campaign", "status ready");
+  }
+}
+
+function mappedValue(record, fieldMap, field) {
+  const source = normalizeFieldMap(fieldMap)[field] || "";
+  return String(source ? (record[source] ?? "") : "").trim();
+}
+
+function fieldLabel(field) {
+  return csvCoreFields.find((config) => config.key === field)?.label || field;
+}
+
+function mapForHeaders(headers, preferredMap = null) {
+  const preferred = normalizeFieldMap(preferredMap || {});
+  const available = new Set(headers);
+  const reusable = Object.fromEntries(
+    Object.entries(preferred).map(([field, source]) => [field, available.has(source) ? source : ""])
+  );
+  const inferred = inferFieldMap(headers);
+
+  return normalizeFieldMap({ ...inferred, ...Object.fromEntries(Object.entries(reusable).filter(([, source]) => source)) });
+}
+
+function inferFieldMap(headers) {
+  const used = new Set();
+  const map = {};
+
+  csvCoreFields.forEach((field) => {
+    const aliases = csvFieldAliases[field.key] || [field.key];
+    const match = headers.find((header) => {
+      if (used.has(header)) return false;
+      const normalized = normalizeHeaderKey(header);
+      return aliases.includes(normalized);
+    }) || "";
+    map[field.key] = match;
+    if (match) used.add(match);
+  });
+
+  return normalizeFieldMap(map);
+}
+
+function normalizeFieldMap(fieldMap = {}) {
+  return Object.fromEntries(csvCoreFields.map((field) => [field.key, String(fieldMap[field.key] || "").trim()]));
+}
+
+function normalizeHeaderKey(value) {
+  return String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 function pillFor(validation) {
-  const className = validation === "Required" || validation === "Accepted" ? "pill sent" : "pill queued";
+  const className = validation === "Required" || validation === "Accepted" || validation === "Mapped"
+    ? "pill sent"
+    : (validation === "Optional" || validation === "Formula check" || validation === "RTL" || validation === "Date" ? "pill queued" : "pill failed");
   return `<span class="${className}">${escapeHtml(validation)}</span>`;
 }
 

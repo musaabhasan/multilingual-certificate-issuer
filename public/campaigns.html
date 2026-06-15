@@ -57,7 +57,7 @@
                     <div class="wizard-step-header">
                         <div>
                             <p class="eyebrow">Step 1</p>
-                            <h3>Upload the recipient CSV and confirm labels</h3>
+                            <h3>Upload the recipient CSV and map fields</h3>
                             <p>The CSV defines each recipient and every variable available in certificates and email messages.</p>
                         </div>
                         <a class="button" href="/samples/recipient-import-sample.csv" download>Sample CSV</a>
@@ -83,11 +83,12 @@
                         </div>
                         <div class="table-scroll full-field">
                             <table class="data-table compact-preview">
-                                <thead><tr><th>Label</th><th>Role</th><th>Status</th></tr></thead>
+                                <thead><tr><th>Recipient field</th><th>CSV column</th><th>Status</th></tr></thead>
                                 <tbody id="campaignCsvMapping">
-                                <tr><td><code>email</code></td><td>Recipient email</td><td><span class="pill sent">Required</span></td></tr>
-                                <tr><td><code>name_en</code></td><td>English name</td><td><span class="pill sent">Required</span></td></tr>
-                                <tr><td><code>unique_identifier</code></td><td>Certificate id</td><td><span class="pill queued">Recommended</span></td></tr>
+                                <tr><td>Email address</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Unique identifier</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Recipient name</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Arabic name</td><td>Optional</td><td><span class="pill queued">Optional</span></td></tr>
                                 </tbody>
                             </table>
                         </div>
