@@ -753,6 +753,50 @@ code {
     white-space: nowrap;
 }
 
+.template-field-map {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #e2e2e2;
+    border-radius: 2px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+.template-field-map-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.template-field-map-list {
+    display: grid;
+    gap: 8px;
+}
+
+.template-field-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 1fr) minmax(120px, 0.7fr);
+    gap: 8px;
+    align-items: center;
+    border-top: 1px solid #eeeeee;
+    padding-top: 8px;
+}
+
+.template-field-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.template-field-row strong,
+.template-field-row small {
+    display: block;
+}
+
+.template-field-row small {
+    color: var(--muted);
+}
+
 .plan-preview.ready {
     border-color: rgba(76, 175, 80, 0.35);
     color: var(--green);
@@ -2126,6 +2170,10 @@ textarea.short-textarea {
 
     .template-upload-summary,
     .campaign-assets .asset-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .template-field-row {
         grid-template-columns: 1fr;
     }
 
