@@ -889,9 +889,11 @@ function app_mfa_required(array $user): bool
 function app_mfa_enabled(array $user): bool
 {
     $mfa = app_user_mfa($user);
+    $secretEncrypted = (string) ($mfa['secretEncrypted'] ?? '');
     return app_mfa_required($user)
         && (string) ($mfa['enabledAt'] ?? '') !== ''
-        && (string) ($mfa['secretEncrypted'] ?? '') !== '';
+        && $secretEncrypted !== ''
+        && app_decrypt_secret($secretEncrypted) !== '';
 }
 
 function app_mfa_session_verified(array $user): bool
@@ -1207,12 +1209,12 @@ function app_key_file(): string
 {
     $path = app_storage_path('app-key.bin');
     if (!is_file($path)) {
-        file_put_contents($path, random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES), LOCK_EX);
+        file_put_contents($path, random_bytes(32), LOCK_EX);
         @chmod($path, 0600);
     }
 
     $key = file_get_contents($path);
-    if ($key === false || strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+    if ($key === false || strlen($key) !== 32) {
         throw new RuntimeException('Local encryption key is invalid.');
     }
 
@@ -1221,13 +1223,26 @@ function app_key_file(): string
 
 function app_encrypt_secret(string $plainText): string
 {
-    $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-    return 'local-sodium:' . base64_encode($nonce . sodium_crypto_secretbox($plainText, $nonce, app_key_file()));
+    $key = app_key_file();
+    if (app_sodium_secretbox_available()) {
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        return 'local-sodium:' . base64_encode($nonce . sodium_crypto_secretbox($plainText, $nonce, $key));
+    }
+
+    return 'local-hmac-sha256:' . app_encrypt_secret_portable($plainText, $key);
 }
 
 function app_decrypt_secret(string $encoded): string
 {
+    if (str_starts_with($encoded, 'local-hmac-sha256:')) {
+        return app_decrypt_secret_portable(substr($encoded, strlen('local-hmac-sha256:')), app_key_file());
+    }
+
     if (!str_starts_with($encoded, 'local-sodium:')) {
+        return '';
+    }
+
+    if (!app_sodium_secretbox_available()) {
         return '';
     }
 
@@ -1240,6 +1255,60 @@ function app_decrypt_secret(string $encoded): string
     $cipherText = substr($payload, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
     $plainText = sodium_crypto_secretbox_open($cipherText, $nonce, app_key_file());
     return is_string($plainText) ? $plainText : '';
+}
+
+function app_sodium_secretbox_available(): bool
+{
+    return extension_loaded('sodium')
+        && defined('SODIUM_CRYPTO_SECRETBOX_NONCEBYTES')
+        && function_exists('sodium_crypto_secretbox')
+        && function_exists('sodium_crypto_secretbox_open');
+}
+
+function app_encrypt_secret_portable(string $plainText, string $key): string
+{
+    $nonce = random_bytes(16);
+    $cipherText = app_secret_xor_keystream($plainText, $key, $nonce);
+    $mac = hash_hmac('sha256', 'mac|' . $nonce . $cipherText, $key, true);
+
+    return base64_encode($nonce . $mac . $cipherText);
+}
+
+function app_decrypt_secret_portable(string $encoded, string $key): string
+{
+    $payload = base64_decode($encoded, true);
+    if ($payload === false || strlen($payload) < 48) {
+        return '';
+    }
+
+    $nonce = substr($payload, 0, 16);
+    $mac = substr($payload, 16, 32);
+    $cipherText = substr($payload, 48);
+    $expectedMac = hash_hmac('sha256', 'mac|' . $nonce . $cipherText, $key, true);
+
+    if (!hash_equals($expectedMac, $mac)) {
+        return '';
+    }
+
+    return app_secret_xor_keystream($cipherText, $key, $nonce);
+}
+
+function app_secret_xor_keystream(string $input, string $key, string $nonce): string
+{
+    $output = '';
+    $offset = 0;
+    $counter = 0;
+    $length = strlen($input);
+
+    while ($offset < $length) {
+        $block = hash_hmac('sha256', 'enc|' . $nonce . pack('N', $counter), $key, true);
+        $chunk = substr($input, $offset, strlen($block));
+        $output .= $chunk ^ substr($block, 0, strlen($chunk));
+        $offset += strlen($chunk);
+        $counter += 1;
+    }
+
+    return $output;
 }
 
 function app_audit(string $action, string $entityType, ?string $entityId = null, array $metadata = []): void
