@@ -7,6 +7,8 @@ const campaignTemplateFile = document.querySelector("#campaignTemplateFile");
 const campaignTemplateFit = document.querySelector("#campaignTemplateFit");
 const campaignTemplateStatus = document.querySelector("#campaignTemplateStatus");
 const campaignTemplatePreview = document.querySelector("#campaignTemplatePreview");
+const wizardTemplatePreviewSample = document.querySelector("#wizardTemplatePreviewSample");
+const wizardTemplatePreviewShuffle = document.querySelector("#wizardTemplatePreviewShuffle");
 const campaignList = document.querySelector("#campaignList");
 const campaignLaneStatus = document.querySelector("#campaignLaneStatus");
 const campaignPlanPreview = document.querySelector("#campaignPlanPreview");
@@ -69,6 +71,7 @@ const csvEditors = new Set();
 const campaignTabs = new Map();
 let activeEmailSurface = null;
 let currentWizardStep = "csv";
+let wizardPreviewSampleIndex = -1;
 
 function setCampaignLaneStatus(text, state = "ready") {
   campaignLaneStatus.textContent = text;
@@ -223,27 +226,200 @@ function renderWizardTemplatePreview() {
   const note = document.querySelector("#wizardTemplatePreviewNote");
   if (!preview || !note) return;
 
-  let background = "";
-  let name = "No template selected";
-  let fit = "contain";
-
-  if (campaignTemplateMode.value === "upload") {
-    background = lastCampaignTemplateUpload?.path || "";
-    name = lastCampaignTemplateUpload?.originalName || "Upload a template image";
-    fit = campaignTemplateFit.value || "stretch";
-  } else {
-    const template = store.findTemplate(campaignTemplate.value);
-    background = template?.layout?.background || "";
-    name = template?.name || "Select a saved template";
-    fit = template?.layout?.backgroundFit || "contain";
-  }
+  const selected = selectedWizardTemplateLayout();
+  const layout = selected.layout;
+  const background = normalizeAssetPath(layout.background);
+  const fit = layout.backgroundFit || "contain";
+  const sample = wizardPreviewSample();
+  const elements = Array.isArray(layout.elements) ? layout.elements : [];
 
   preview.style.setProperty("--wizard-preview-background", background ? `url("${browserAssetUrl(background)}")` : "none");
   preview.dataset.backgroundFit = normalizeBackgroundFit(fit);
   preview.classList.toggle("has-background", Boolean(background));
-  note.textContent = background
-    ? `${name} is selected. Recipient name, program, issue date, and QR placeholders are shown as a placement preview.`
-    : "Template preview updates after you select or upload a certificate design.";
+  preview.innerHTML = renderWizardPreviewElements(layout, sample.record);
+
+  if (wizardTemplatePreviewSample) {
+    wizardTemplatePreviewSample.textContent = sample.record
+      ? `Sample ${sample.index + 1}/${sample.total}: ${wizardRecipientLabel(sample.record)}`
+      : "Upload CSV to preview a recipient";
+    wizardTemplatePreviewSample.className = `status ${sample.record ? "ready" : "locked"}`;
+  }
+
+  if (wizardTemplatePreviewShuffle) {
+    wizardTemplatePreviewShuffle.disabled = !sample.record || sample.total < 2;
+  }
+
+  if (!selected.ready) {
+    note.textContent = selected.note;
+  } else if (sample.record) {
+    note.textContent = `${selected.name} is shown with ${elements.length} placed item${elements.length === 1 ? "" : "s"} using a recipient from this campaign CSV.`;
+  } else {
+    note.textContent = `${selected.name} is selected. Upload the campaign CSV to fill the placed fields with recipient data.`;
+  }
+}
+
+function selectedWizardTemplateLayout() {
+  if (campaignTemplateMode.value === "upload") {
+    if (!lastCampaignTemplateUpload) {
+      return {
+        ready: false,
+        name: "Uploaded template",
+        note: "Upload a template image to preview the campaign certificate design.",
+        layout: { page: { width: 297, height: 210, orientation: "landscape" }, background: "", backgroundFit: campaignTemplateFit.value || "stretch", elements: [] }
+      };
+    }
+
+    return {
+      ready: true,
+      name: campaignTemplateName.value.trim() || lastCampaignTemplateUpload.originalName || "Uploaded template",
+      note: "",
+      layout: buildCampaignTemplateLayout(lastCampaignTemplateUpload, campaignTemplateFit.value)
+    };
+  }
+
+  const template = store.findTemplate(campaignTemplate.value);
+  if (!template?.layout) {
+    return {
+      ready: false,
+      name: "Saved template",
+      note: "Select a saved template to preview the certificate design.",
+      layout: { page: { width: 297, height: 210, orientation: "landscape" }, background: "", backgroundFit: "contain", elements: [] }
+    };
+  }
+
+  return {
+    ready: true,
+    name: template.name || "Saved template",
+    note: "",
+    layout: normalizeWizardTemplateLayout(template.layout)
+  };
+}
+
+function normalizeWizardTemplateLayout(layout = {}) {
+  return {
+    page: {
+      width: Number(layout.page?.width || 297),
+      height: Number(layout.page?.height || 210),
+      orientation: layout.page?.orientation || "landscape"
+    },
+    background: normalizeAssetPath(layout.background),
+    backgroundFit: normalizeBackgroundFit(layout.backgroundFit || "contain"),
+    elements: Array.isArray(layout.elements) ? layout.elements : []
+  };
+}
+
+function renderWizardPreviewElements(layout, record) {
+  const elements = Array.isArray(layout.elements) ? layout.elements : [];
+  if (elements.length === 0) {
+    return '<div class="wizard-preview-empty">Certificate design preview</div>';
+  }
+
+  return elements.map((element) => wizardPreviewElementMarkup(element, layout, record)).join("");
+}
+
+function wizardPreviewElementMarkup(element, layout, record) {
+  if (!element || typeof element !== "object") return "";
+
+  const type = element.type || "csv_text";
+  const style = wizardPreviewElementStyle(element, layout);
+  if (type === "verification_qr") {
+    return `<div class="wizard-preview-field wizard-preview-qr" style="${style}" aria-label="${escapeAttribute(element.label || "Verification QR")}">QR</div>`;
+  }
+
+  if (type === "image") {
+    const src = normalizeAssetPath(element.src);
+    if (!src) return "";
+    const fit = imageFitToCss(element.fit || "contain");
+    return `<div class="wizard-preview-field wizard-preview-image" style="${style} background-image:url('${escapeAttribute(browserAssetUrl(src))}'); background-size:${escapeAttribute(fit)};" aria-label="${escapeAttribute(element.label || "Image")}"></div>`;
+  }
+
+  const value = wizardPreviewTextValue(element, record);
+  const align = normalizedAlign(element.align);
+  return `<div class="wizard-preview-field" data-align="${escapeAttribute(align)}" dir="${escapeAttribute(normalizedDirection(element.direction))}" style="${style}">${escapeHtml(value)}</div>`;
+}
+
+function wizardPreviewElementStyle(element, layout) {
+  const page = layout.page || {};
+  const pageWidth = Math.max(1, Number(page.width || 297));
+  const pageHeight = Math.max(1, Number(page.height || 210));
+  const left = clampPercent(Number(element.x || 0) / pageWidth * 100);
+  const top = clampPercent(Number(element.y || 0) / pageHeight * 100);
+  const width = clampPercent(Number(element.width || 20) / pageWidth * 100);
+  const height = clampPercent(Number(element.height || 8) / pageHeight * 100);
+  const fontSize = Math.max(7, Math.min(34, Number(element.fontSize || 12) * 0.45));
+  const color = /^#[0-9A-Fa-f]{6}$/.test(String(element.color || "")) ? element.color : "#202124";
+  const align = normalizedAlign(element.align);
+
+  return [
+    `left:${left}%`,
+    `top:${top}%`,
+    `width:${width}%`,
+    `height:${height}%`,
+    `font-size:${fontSize.toFixed(1)}px`,
+    `font-family:${fontCssFamily(element.font || "dejavusans")}, Arial, sans-serif`,
+    `color:${color}`,
+    `text-align:${align}`
+  ].join("; ");
+}
+
+function wizardPreviewTextValue(element, record) {
+  if ((element.type || "csv_text") === "static_text") {
+    return String(element.text || element.label || "Text");
+  }
+
+  const source = String(element.source || element.key || "").trim();
+  if (record) {
+    const fieldMap = normalizeFieldMap(lastCampaignImport?.fieldMap || {});
+    const mapped = fieldMap[source] ? String(record[fieldMap[source]] ?? "").trim() : "";
+    const direct = source ? String(record[source] ?? "").trim() : "";
+    const value = mapped || direct;
+    if (value) return value;
+  }
+
+  return source ? `{{${source}}}` : (element.label || "Field");
+}
+
+function wizardPreviewSample() {
+  const records = Array.isArray(lastCampaignImport?.records) ? lastCampaignImport.records : [];
+  if (records.length === 0) {
+    wizardPreviewSampleIndex = -1;
+    return { record: null, index: -1, total: 0 };
+  }
+
+  if (wizardPreviewSampleIndex < 0 || wizardPreviewSampleIndex >= records.length) {
+    chooseWizardPreviewSample();
+  }
+
+  return {
+    record: records[wizardPreviewSampleIndex] || records[0],
+    index: Math.max(0, wizardPreviewSampleIndex),
+    total: records.length
+  };
+}
+
+function chooseWizardPreviewSample() {
+  const count = Array.isArray(lastCampaignImport?.records) ? lastCampaignImport.records.length : 0;
+  wizardPreviewSampleIndex = count > 0 ? Math.floor(Math.random() * count) : -1;
+}
+
+function wizardRecipientLabel(record) {
+  const fieldMap = normalizeFieldMap(lastCampaignImport?.fieldMap || {});
+  return mappedValue(record, fieldMap, "name_en")
+    || mappedValue(record, fieldMap, "name_ar")
+    || mappedValue(record, fieldMap, "email")
+    || "recipient";
+}
+
+function normalizedAlign(value) {
+  return ["left", "center", "right"].includes(value) ? value : "left";
+}
+
+function normalizedDirection(value) {
+  return ["ltr", "rtl"].includes(value) ? value : "ltr";
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0)).toFixed(3);
 }
 
 function renderWizardReviewSummary() {
@@ -652,6 +828,7 @@ campaignForm.addEventListener("submit", async (event) => {
 
     lastCampaignImport = null;
     lastCampaignTemplateUpload = null;
+    wizardPreviewSampleIndex = -1;
     campaignCsvFile.value = "";
     campaignTemplateFile.value = "";
     if (campaignIncludeVerificationLink) campaignIncludeVerificationLink.checked = false;
@@ -879,6 +1056,7 @@ campaignCsvFile.addEventListener("change", async () => {
     await importCampaignCsv(file);
   } catch (error) {
     lastCampaignImport = null;
+    wizardPreviewSampleIndex = -1;
     campaignCsvRows.textContent = "0";
     campaignCsvLabels.textContent = "0";
     campaignCsvFileName.textContent = file.name;
@@ -888,6 +1066,7 @@ campaignCsvFile.addEventListener("change", async () => {
   }
 
   renderPlanPreview();
+  renderWizardTemplatePreview();
 });
 
 campaignCsvMapping.addEventListener("change", (event) => {
@@ -901,6 +1080,7 @@ campaignCsvMapping.addEventListener("change", (event) => {
   renderMapping(lastCampaignImport.headers, lastCampaignImport.records, lastCampaignImport.fieldMap);
   renderPreview(lastCampaignImport.headers, lastCampaignImport.records, lastCampaignImport.fieldMap);
   updateCsvMappingStatus(lastCampaignImport);
+  renderWizardTemplatePreview();
   renderWizardReviewSummary();
   renderPlanPreview();
 });
@@ -920,8 +1100,15 @@ campaignCsvPreview.addEventListener("input", (event) => {
   }
 
   updateCsvMappingStatus(lastCampaignImport);
+  renderWizardTemplatePreview();
   renderWizardReviewSummary();
   renderPlanPreview();
+});
+
+wizardTemplatePreviewShuffle?.addEventListener("click", () => {
+  chooseWizardPreviewSample();
+  renderWizardTemplatePreview();
+  renderWizardReviewSummary();
 });
 
 campaignTemplateMode.addEventListener("change", () => {
@@ -1966,6 +2153,67 @@ function normalizeBackgroundFit(value) {
   return ["cover", "contain", "stretch"].includes(value) ? value : "stretch";
 }
 
+function normalizeAssetPath(value) {
+  const path = String(value || "").trim().replaceAll("\\", "/");
+  return ["", "undefined", "null", "false", "#"].includes(path.toLowerCase()) ? "" : path;
+}
+
+function browserAssetUrl(path) {
+  const cleanPath = normalizeAssetPath(path);
+  if (!cleanPath) return "";
+  if (/^(blob:|data:|https?:\/\/|\/asset\.php\?)/i.test(cleanPath)) return cleanPath;
+  if (/^storage\/uploads\/(backgrounds|images)\//i.test(cleanPath)) {
+    return `/asset.php?path=${encodeURIComponent(cleanPath)}`;
+  }
+  return cleanPath;
+}
+
+function imageFitToCss(fit) {
+  if (fit === "cover") return "cover";
+  if (fit === "stretch") return "100% 100%";
+  return "contain";
+}
+
+function fontCssFamily(fontValue) {
+  const fontMap = {
+    dejavusans: "DejaVu Sans",
+    dejavuserif: "DejaVu Serif",
+    dejavusansmono: "DejaVu Sans Mono",
+    freesans: "FreeSans, Arial",
+    freeserif: "FreeSerif, Times New Roman",
+    freemono: "FreeMono, Courier New",
+    lateef: "Lateef, serif",
+    xbriyaz: "XB Riyaz, serif",
+    kfgqpcuthmantahanaskh: "KFGQPC Uthman Taha Naskh, serif",
+    arial: "Arial",
+    arial_narrow: "Arial Narrow, Arial",
+    tahoma: "Tahoma",
+    times_new_roman: "Times New Roman",
+    calibri: "Calibri",
+    segoe_ui: "Segoe UI",
+    verdana: "Verdana",
+    georgia: "Georgia",
+    trebuchet_ms: "Trebuchet MS",
+    courier_new: "Courier New",
+    noto_sans: "Noto Sans, Arial",
+    noto_serif: "Noto Serif, Times New Roman",
+    noto_sans_arabic: "Noto Sans Arabic, Tahoma",
+    noto_naskh_arabic: "Noto Naskh Arabic, serif",
+    noto_kufi_arabic: "Noto Kufi Arabic, Tahoma",
+    traditional_arabic: "Traditional Arabic, serif",
+    arabic_typesetting: "Arabic Typesetting, serif",
+    sakkal_majalla: "Sakkal Majalla, serif",
+    simplified_arabic: "Simplified Arabic, serif",
+    bukra_slanted: "Bukra Slanted",
+    bukra_book_slanted: "Bukra Book Slanted",
+    bukra_light_slanted: "Bukra Light Slanted",
+    bukra_extralight_slanted: "Bukra ExtraLight Slanted",
+    bukra_thin_slanted: "Bukra Thin Slanted"
+  };
+  const normalized = String(fontValue || "dejavusans").trim().toLowerCase();
+  return fontMap[normalized] || "DejaVu Sans";
+}
+
 function templateSourceLabel(campaign) {
   if (campaign.templateSource === "campaign_upload") return "Campaign upload";
   return "Saved template";
@@ -1979,6 +2227,7 @@ function addCampaignEvent(campaign, message, date = new Date()) {
 }
 
 function resetCampaignCsvPreview() {
+  wizardPreviewSampleIndex = -1;
   setCsvStatus("No CSV selected", "status locked");
   campaignCsvFileName.textContent = "Upload a recipient CSV for this campaign.";
   campaignCsvRows.textContent = "0";
@@ -2000,6 +2249,7 @@ async function importCampaignCsv(file) {
   const fieldMap = inferFieldMap(headers);
 
   lastCampaignImport = { fileName: file.name, headers, records, fieldMap };
+  chooseWizardPreviewSample();
   campaignCsvRows.textContent = String(records.length);
   campaignCsvLabels.textContent = String(headers.length);
   renderMapping(headers, records, fieldMap);
@@ -2011,6 +2261,7 @@ async function importCampaignCsv(file) {
     updateCsvMappingStatus(lastCampaignImport);
   }
 
+  renderWizardTemplatePreview();
   renderWizardReviewSummary();
 }
 
