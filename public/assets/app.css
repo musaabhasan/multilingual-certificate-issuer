@@ -1641,6 +1641,13 @@ code {
     min-width: 180px;
 }
 
+.data-table .table-input {
+    width: 100%;
+    min-width: 140px;
+    padding: 7px 8px;
+    font-size: 13px;
+}
+
 .compact-table th,
 .data-table th {
     color: #757575;

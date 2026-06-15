@@ -169,18 +169,25 @@ function renderCampaignQueue(campaign) {
           <span>${recipientRows.length} of ${matchingRecipients.length} shown</span>
         </div>
         <table class="data-table compact-preview">
-          <thead><tr><th>#</th><th>Recipient</th><th>Email</th><th>Status</th><th>Sent at</th><th>Actions</th></tr></thead>
+          <thead><tr><th>#</th><th>Certificate id</th><th>Recipient</th><th>Email</th><th>Status</th><th>Sent at</th><th>Actions</th></tr></thead>
           <tbody>
             ${recipientRows.map((recipient) => `
               <tr>
                 <td>${Number(recipient.sequence || 0)}</td>
-                <td>${escapeHtml(recipient.displayName)}</td>
-                <td>${escapeHtml(recipient.email || "-")}</td>
+                <td>
+                  <input class="table-input" data-recipient-edit="identifier" data-id="${escapeHtml(campaign.id)}" data-recipient-id="${escapeHtml(recipient.id)}" value="${escapeAttribute(recipient.identifier || "")}">
+                </td>
+                <td>
+                  <input class="table-input" data-recipient-edit="displayName" data-id="${escapeHtml(campaign.id)}" data-recipient-id="${escapeHtml(recipient.id)}" value="${escapeAttribute(recipient.displayName || "")}">
+                </td>
+                <td>
+                  <input class="table-input" type="email" data-recipient-edit="email" data-id="${escapeHtml(campaign.id)}" data-recipient-id="${escapeHtml(recipient.id)}" value="${escapeAttribute(recipient.email || "")}">
+                </td>
                 <td><span class="${queueStore.recipientStatusClass(recipient.status)}">${queueStore.recipientStatusLabel(recipient.status)}</span></td>
                 <td>${escapeHtml(shortTime(recipient.sentAt) || "-")}</td>
                 <td>${recipientActionsMarkup(campaign.id, recipient)}</td>
               </tr>
-            `).join("") || "<tr><td colspan=\"6\">No recipient CSV attached yet.</td></tr>"}
+            `).join("") || "<tr><td colspan=\"7\">No recipient CSV attached yet.</td></tr>"}
           </tbody>
         </table>
       </div>
@@ -280,6 +287,20 @@ function hasAutoQueueWork() {
   });
 }
 
+queueCampaignList.addEventListener("change", (event) => {
+  const recipientEdit = event.target.closest("[data-recipient-edit]");
+  if (!recipientEdit) return;
+
+  try {
+    updateRecipientFromInput(recipientEdit);
+    renderQueue();
+    setQueueStatus("Recipient data updated. Campaign was paused if it was active.", "ready");
+  } catch (error) {
+    renderQueue();
+    setQueueStatus(error.message, "warning");
+  }
+});
+
 queueCampaignList.addEventListener("click", async (event) => {
   const recipientButton = event.target.closest("button[data-recipient-action]");
   if (recipientButton) {
@@ -313,9 +334,10 @@ queueCampaignList.addEventListener("click", async (event) => {
 
   try {
     if (button.dataset.action === "running") {
-      await queueStore.updateCampaignStatusAsync(button.dataset.id, "running");
+      const beforeStart = queueStore.findCampaign(button.dataset.id);
+      const started = await queueStore.updateCampaignStatusAsync(button.dataset.id, "running");
       renderQueue();
-      setQueueStatus("Campaign started", "ready");
+      setQueueStatus(startCampaignMessage(beforeStart, started), "ready");
       window.setTimeout(() => { void runAutoQueue(); }, 0);
     } else if (button.dataset.action === "send-one") {
       await queueStore.manualSendOneAsync(button.dataset.id);
@@ -326,9 +348,9 @@ queueCampaignList.addEventListener("click", async (event) => {
       renderQueue();
       setQueueStatus("Campaign closed", "ready");
     } else if (button.dataset.action === "save-schedule") {
-      saveCampaignSchedule(button.dataset.id);
+      const scheduleResult = saveCampaignSchedule(button.dataset.id);
       renderQueue();
-      setQueueStatus("Campaign schedule updated", "ready");
+      setQueueStatus(scheduleResult.message, "ready");
     } else if (button.dataset.action === "restart-campaign") {
       if (!window.confirm("Restarting resets all recipients to queued and pauses this campaign. Continue?")) {
         setQueueStatus("Restart cancelled", "locked");
@@ -527,6 +549,46 @@ function recipientActionsMarkup(campaignId, recipient) {
   `;
 }
 
+function updateRecipientFromInput(input) {
+  const campaignId = input.dataset.id;
+  const recipientId = input.dataset.recipientId;
+  const field = input.dataset.recipientEdit;
+  const value = input.value.trim();
+  const campaign = queueStore.findCampaign(campaignId);
+  const recipient = (campaign?.recipientQueue || []).find((record) => record.id === recipientId);
+  if (!campaign || !recipient) {
+    throw new Error("Recipient not found.");
+  }
+
+  if (!["identifier", "displayName", "email"].includes(field)) {
+    throw new Error("Recipient field is not editable.");
+  }
+
+  if (!value) {
+    throw new Error(field === "email" ? "Recipient email is required." : "Recipient value is required.");
+  }
+
+  if (field === "email" && !isValidEmail(value)) {
+    throw new Error("Enter a valid recipient email address.");
+  }
+
+  const currentValue = String(recipient[field === "displayName" ? "displayName" : field] || "").trim();
+  if (currentValue === value) return;
+
+  const hasDeliveryProgress = ["rendered", "sent", "failed", "skipped"].includes(recipient.status || "queued")
+    || Boolean(recipient.renderedAt || recipient.sentAt || recipient.failedAt || recipient.skippedAt || recipient.certificatePath);
+  if (hasDeliveryProgress && !window.confirm("Editing this recipient resets their certificate and delivery progress. Continue?")) {
+    throw new Error("Recipient edit cancelled.");
+  }
+
+  if (["running", "scheduled"].includes(campaign.status)
+    && !window.confirm("Editing recipients pauses this active campaign for review before sending continues. Continue?")) {
+    throw new Error("Recipient edit cancelled.");
+  }
+
+  queueStore.updateRecipientFields(campaignId, recipientId, { [field]: value });
+}
+
 function updateRecipientFromButton(button) {
   const campaignId = button.dataset.id;
   const recipientId = button.dataset.recipientId;
@@ -581,12 +643,9 @@ function saveCampaignSchedule(campaignId) {
     throw new Error("Random delay max must be greater than or equal to the minimum.");
   }
 
-  const startDate = windowStartAt ? new Date(windowStartAt) : null;
-  const status = startDate && startDate.getTime() > Date.now() && campaign.status !== "paused"
-    ? "scheduled"
-    : (campaign.status === "draft" ? "scheduled" : campaign.status);
+  const status = activeScheduleStatus(campaign.status, windowStartAt);
 
-  queueStore.updateCampaignSchedule(campaignId, {
+  const updated = queueStore.updateCampaignSchedule(campaignId, {
     status,
     scheduledAt: windowStartAt,
     windowStartAt,
@@ -598,6 +657,70 @@ function saveCampaignSchedule(campaignId) {
     randomDelayMaxSeconds,
     throttleSeconds: randomDelayMinSeconds
   });
+
+  return {
+    campaign: updated,
+    message: scheduleSaveMessage(campaign, updated)
+  };
+}
+
+function activeScheduleStatus(currentStatus, windowStartAt) {
+  if (!["running", "scheduled"].includes(currentStatus)) {
+    return currentStatus;
+  }
+
+  const startDate = windowStartAt ? new Date(windowStartAt) : null;
+  return startDate && !Number.isNaN(startDate.getTime()) && startDate.getTime() > Date.now() ? "scheduled" : "running";
+}
+
+function startCampaignMessage(beforeStart, started) {
+  if (!started) return "Campaign start request completed.";
+
+  if (started.status === "scheduled") {
+    return `Campaign armed. Sending will start at ${shortTime(started.windowStartAt || started.scheduledAt)}.`;
+  }
+
+  const plannedStart = parseDate(beforeStart?.windowStartAt || beforeStart?.scheduledAt);
+  const plannedEnd = parseDate(beforeStart?.windowEndAt);
+  if (plannedEnd && plannedEnd.getTime() <= Date.now() && !started.windowEndAt) {
+    return "Campaign started. The previous delivery window had ended, so the end time was cleared and sending can continue until complete.";
+  }
+
+  if (plannedStart && plannedStart.getTime() <= Date.now()) {
+    return "Campaign started. The planned start time has already passed, so due recipients can be processed now.";
+  }
+
+  return "Campaign started. Queue worker will process due recipients.";
+}
+
+function scheduleSaveMessage(beforeSave, updated) {
+  if (!updated) return "Campaign schedule updated.";
+  if (beforeSave.status === "draft") {
+    return "Schedule saved. Campaign is still a draft; use Start when you are ready to activate sending.";
+  }
+  if (beforeSave.status === "paused") {
+    return "Schedule saved. Campaign remains paused until you start it.";
+  }
+  if (updated.status === "scheduled") {
+    return `Schedule saved. Sending will start at ${shortTime(updated.windowStartAt || updated.scheduledAt)}.`;
+  }
+
+  const plannedStart = parseDate(updated.windowStartAt || updated.scheduledAt);
+  if (["running", "scheduled"].includes(beforeSave.status) && plannedStart && plannedStart.getTime() <= Date.now()) {
+    return "Schedule saved. The planned start time has already passed, so the campaign is due now.";
+  }
+
+  return "Campaign schedule updated.";
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 function isWindowExpired(campaign, plan = queueStore.deliveryPlan(campaign)) {

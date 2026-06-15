@@ -613,6 +613,90 @@
     return updateCampaignRecipient(campaignId, recipientId, "remove");
   }
 
+  function updateRecipientFields(campaignId, recipientId, updates = {}) {
+    const campaign = findCampaign(campaignId);
+    if (!campaign) return null;
+
+    let editedRecipient = null;
+    let resetProgress = false;
+    const queue = (Array.isArray(campaign.recipientQueue) ? campaign.recipientQueue : []).map((record) => {
+      if (record.id !== recipientId) return record;
+
+      const nextData = {
+        ...(record.data && typeof record.data === "object" ? record.data : {})
+      };
+      let next = { ...record, data: nextData };
+
+      if (Object.prototype.hasOwnProperty.call(updates, "identifier")) {
+        const identifier = String(updates.identifier || "").trim();
+        next.identifier = identifier;
+        next.data.unique_identifier = identifier;
+        next.data.certificate_number = identifier;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, "displayName")) {
+        const displayName = String(updates.displayName || "").trim();
+        next.displayName = displayName;
+        next.nameEn = displayName;
+        next.data.name_en = displayName;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, "email")) {
+        const email = String(updates.email || "").trim();
+        if (!isValidEmail(email)) {
+          throw new Error("Enter a valid recipient email address.");
+        }
+        next.email = email;
+        next.data.email = email;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, "nameAr")) {
+        const nameAr = String(updates.nameAr || "").trim();
+        next.nameAr = nameAr;
+        next.data.name_ar = nameAr;
+      }
+
+      const hadDeliveryProgress = ["rendered", "sent", "failed", "skipped"].includes(record.status || "queued")
+        || Boolean(record.renderedAt || record.sentAt || record.failedAt || record.skippedAt || record.certificatePath);
+      const changed = JSON.stringify(next) !== JSON.stringify(record);
+      if (changed && hadDeliveryProgress) {
+        resetProgress = true;
+        next = resetRecipientForSending(next);
+      }
+
+      editedRecipient = next;
+      return next;
+    });
+
+    if (!editedRecipient) return campaign;
+
+    const counts = queueCounts(queue);
+    const wasActive = ["running", "scheduled"].includes(campaign.status);
+    const requiresDesignReview = Object.prototype.hasOwnProperty.call(updates, "identifier")
+      || Object.prototype.hasOwnProperty.call(updates, "displayName")
+      || Object.prototype.hasOwnProperty.call(updates, "nameAr");
+    let nextStatus = wasActive ? "paused" : campaign.status;
+    if (counts.pending > 0 && campaign.status === "completed") {
+      nextStatus = "paused";
+    }
+    const name = editedRecipient.displayName || editedRecipient.email || editedRecipient.identifier || "recipient";
+    const message = wasActive
+      ? `Recipient data edited for ${name}. Campaign paused for review before sending continues.`
+      : `Recipient data edited for ${name}.`;
+
+    return saveCampaign({
+      ...campaign,
+      ...counts,
+      status: nextStatus,
+      completedAt: nextStatus === "completed" ? campaign.completedAt : "",
+      nextSendAfterAt: "",
+      designReviewedAt: requiresDesignReview ? "" : (campaign.designReviewedAt || ""),
+      designReviewRecipientId: requiresDesignReview ? "" : (campaign.designReviewRecipientId || ""),
+      recipientQueue: queue,
+      deliveryEvents: addDeliveryEvent(campaign, resetProgress ? `${message} Delivery progress was reset for this recipient.` : message)
+    });
+  }
+
   function updateCampaignRecipient(campaignId, recipientId, action) {
     const campaign = findCampaign(campaignId);
     if (!campaign) return null;
@@ -1223,6 +1307,7 @@
     retryRecipient,
     skipRecipient,
     removeRecipient,
+    updateRecipientFields,
     restartCampaign,
     reuseCampaign,
     buildRecipientQueue,
