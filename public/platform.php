@@ -208,9 +208,11 @@ function app_seed_verification_qr(float $x, float $y): array
 function app_state(): array
 {
     $state = app_read_json(app_storage_path('state.json'), app_seed_state());
+    $deletedCampaignIds = is_array($state['deletedCampaignIds'] ?? null) ? $state['deletedCampaignIds'] : [];
     return [
         'templates' => is_array($state['templates'] ?? null) ? $state['templates'] : [],
         'campaigns' => is_array($state['campaigns'] ?? null) ? $state['campaigns'] : [],
+        'deletedCampaignIds' => app_normalized_deleted_campaign_ids($deletedCampaignIds),
     ];
 }
 
@@ -232,6 +234,8 @@ function app_save_client_state(array $state): array
 
 function app_merge_client_state(array $incoming, array $current): array
 {
+    $deletedCampaignIds = app_merge_deleted_campaign_ids($incoming, $current);
+    $deletedCampaignSet = array_fill_keys($deletedCampaignIds, true);
     $currentCampaigns = [];
     foreach ($current['campaigns'] ?? [] as $campaign) {
         if (is_array($campaign) && trim((string) ($campaign['id'] ?? '')) !== '') {
@@ -246,6 +250,10 @@ function app_merge_client_state(array $incoming, array $current): array
         }
 
         $campaignId = (string) ($campaign['id'] ?? '');
+        if ($campaignId !== '' && isset($deletedCampaignSet[$campaignId])) {
+            continue;
+        }
+
         if ($campaignId !== '' && isset($currentCampaigns[$campaignId])) {
             $campaign = app_merge_client_campaign($campaign, $currentCampaigns[$campaignId]);
         }
@@ -256,7 +264,29 @@ function app_merge_client_state(array $incoming, array $current): array
     return [
         'templates' => is_array($incoming['templates'] ?? null) ? array_values($incoming['templates']) : [],
         'campaigns' => $campaigns,
+        'deletedCampaignIds' => $deletedCampaignIds,
     ];
+}
+
+function app_merge_deleted_campaign_ids(array $incoming, array $current): array
+{
+    $incomingDeleted = app_normalized_deleted_campaign_ids(is_array($incoming['deletedCampaignIds'] ?? null) ? $incoming['deletedCampaignIds'] : []);
+    $currentDeleted = app_normalized_deleted_campaign_ids(is_array($current['deletedCampaignIds'] ?? null) ? $current['deletedCampaignIds'] : []);
+
+    return app_normalized_deleted_campaign_ids([...$currentDeleted, ...$incomingDeleted]);
+}
+
+function app_normalized_deleted_campaign_ids(array $ids): array
+{
+    $normalized = [];
+    foreach ($ids as $id) {
+        $value = trim((string) $id);
+        if ($value !== '') {
+            $normalized[$value] = true;
+        }
+    }
+
+    return array_slice(array_keys($normalized), -1000);
 }
 
 function app_merge_client_campaign(array $incoming, array $current): array
@@ -486,6 +516,11 @@ function app_validate_state(array $state): array
 {
     $templates = is_array($state['templates'] ?? null) ? array_values($state['templates']) : [];
     $campaigns = is_array($state['campaigns'] ?? null) ? array_values($state['campaigns']) : [];
+    $deletedCampaignIds = app_normalized_deleted_campaign_ids(is_array($state['deletedCampaignIds'] ?? null) ? $state['deletedCampaignIds'] : []);
+    $deletedCampaignSet = array_fill_keys($deletedCampaignIds, true);
+    $campaigns = array_values(array_filter($campaigns, static function (mixed $campaign) use ($deletedCampaignSet): bool {
+        return is_array($campaign) && !isset($deletedCampaignSet[(string) ($campaign['id'] ?? '')]);
+    }));
 
     if (count($templates) > 300) {
         throw new RuntimeException('Template limit exceeded.');
@@ -529,7 +564,7 @@ function app_validate_state(array $state): array
         }
     }
 
-    return ['templates' => $templates, 'campaigns' => $campaigns];
+    return ['templates' => $templates, 'campaigns' => $campaigns, 'deletedCampaignIds' => $deletedCampaignIds];
 }
 
 function app_default_settings(): array

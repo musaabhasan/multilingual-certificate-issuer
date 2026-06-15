@@ -1,5 +1,6 @@
 (function () {
   const storageKey = "certificateIssuerState";
+  const deletedCampaignLimit = 1000;
   let cachedState = null;
   let cachedSettings = null;
   const delayUnits = Object.freeze({
@@ -100,7 +101,8 @@
         deliveryEvents: [],
         updatedAt: "2026-06-01T10:00:00.000Z"
       }
-    ]
+    ],
+    deletedCampaignIds: []
   };
 
   function field(key, label, source, x, y, direction, fontSize, font = "dejavusans") {
@@ -142,14 +144,18 @@
       const response = serverRequest("GET", "state");
       const serverState = migrateState(response.state || seedState);
       const localState = readLocalState();
-      if (localState && shouldImportLocalState(serverState, localState)) {
-        cachedState = migrateState(localState);
+      if (localState && shouldImportLocalTemplates(serverState, localState)) {
+        cachedState = migrateState({
+          ...serverState,
+          templates: mergeTemplates(serverState.templates, localState.templates)
+        });
         cachedSettings = response.settings || null;
         saveState(cachedState);
         return clone(cachedState);
       }
       cachedState = serverState;
       cachedSettings = response.settings || null;
+      localStorage.setItem(storageKey, JSON.stringify(cachedState));
       return clone(cachedState);
     } catch (error) {
       console.warn("Server campaign state could not be loaded", error);
@@ -176,6 +182,7 @@
       const response = serverRequest("POST", "state", normalized);
       cachedState = migrateState(response.state || normalized);
       cachedSettings = response.settings || cachedSettings;
+      localStorage.setItem(storageKey, JSON.stringify(cachedState));
       return;
     } catch (error) {
       console.warn("Server campaign state could not be saved", error);
@@ -195,12 +202,23 @@
     }
   }
 
-  function shouldImportLocalState(serverState, localState) {
-    const serverCampaigns = serverState.campaigns?.length || 0;
-    const localCampaigns = localState.campaigns?.length || 0;
+  function shouldImportLocalTemplates(serverState, localState) {
     const serverTemplates = serverState.templates?.length || 0;
     const localTemplates = localState.templates?.length || 0;
-    return (serverCampaigns === 0 && localCampaigns > 0) || localTemplates > serverTemplates;
+    return localTemplates > serverTemplates;
+  }
+
+  function mergeTemplates(serverTemplates = [], localTemplates = []) {
+    const byId = new Map();
+    [...serverTemplates, ...localTemplates].forEach((template) => {
+      if (!template || typeof template !== "object" || !template.id) return;
+      const existing = byId.get(template.id);
+      if (!existing || sortableTime(template.updatedAt) >= sortableTime(existing.updatedAt)) {
+        byId.set(template.id, template);
+      }
+    });
+
+    return [...byId.values()];
   }
 
   function serverRequest(method, action, payload = {}) {
@@ -372,9 +390,14 @@
   }
 
   function migrateState(state) {
+    const deletedCampaignIds = [...new Set((state.deletedCampaignIds || []).map(String).filter(Boolean))].slice(-deletedCampaignLimit);
+    const deletedSet = new Set(deletedCampaignIds);
     return {
       templates: state.templates || [],
-      campaigns: (state.campaigns || []).map(normalizeCampaign)
+      campaigns: (state.campaigns || [])
+        .map(normalizeCampaign)
+        .filter((campaign) => !deletedSet.has(String(campaign.id || ""))),
+      deletedCampaignIds
     };
   }
 
@@ -515,6 +538,7 @@
     } else {
       state.campaigns.push(next);
     }
+    state.deletedCampaignIds = (state.deletedCampaignIds || []).filter((id) => String(id) !== String(next.id));
 
     saveState(state);
     return next;
@@ -563,6 +587,7 @@
     if (!campaign) return null;
 
     state.campaigns = state.campaigns.filter((item) => item.id !== id);
+    state.deletedCampaignIds = rememberDeletedCampaignIds(state.deletedCampaignIds, [id]);
     saveState(state);
     return campaign;
   }
@@ -576,8 +601,16 @@
     if (deleted.length === 0) return [];
 
     state.campaigns = state.campaigns.filter((item) => !idSet.has(String(item.id || "")));
+    state.deletedCampaignIds = rememberDeletedCampaignIds(state.deletedCampaignIds, [...idSet]);
     saveState(state);
     return deleted;
+  }
+
+  function rememberDeletedCampaignIds(existing = [], ids = []) {
+    return [...new Set([
+      ...(Array.isArray(existing) ? existing : []).map(String).filter(Boolean),
+      ...ids.map(String).filter(Boolean)
+    ])].slice(-deletedCampaignLimit);
   }
 
   function updateCampaignSchedule(id, updates) {
