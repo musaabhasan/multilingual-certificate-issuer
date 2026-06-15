@@ -615,16 +615,20 @@
 
     const counts = queueCounts(queue);
     const message = recipientActionMessage(action, changedRecipient, currentStatus);
-    const nextStatus = counts.pending === 0 && queue.length > 0 && ["running", "scheduled"].includes(campaign.status)
-      ? "paused"
-      : campaign.status;
+    const allTerminal = queue.length > 0 && queue.every((record) => terminalRecipientStatuses.includes(record.status || "queued"));
+    let nextStatus = campaign.status;
+    if (allTerminal && ["running", "scheduled", "paused"].includes(campaign.status)) {
+      nextStatus = "completed";
+    } else if (action === "retry" && counts.pending > 0 && campaign.status === "completed") {
+      nextStatus = "paused";
+    }
 
     return saveCampaign({
       ...campaign,
       ...counts,
       status: nextStatus,
       recipientQueue: queue,
-      nextSendAfterAt: counts.pending === 0 ? "" : (campaign.nextSendAfterAt || ""),
+      nextSendAfterAt: action === "retry" || counts.pending === 0 ? "" : (campaign.nextSendAfterAt || ""),
       completedAt: nextStatus === "completed" ? now() : "",
       deliveryEvents: addDeliveryEvent(campaign, message)
     });

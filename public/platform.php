@@ -1373,6 +1373,11 @@ function app_campaign_delivery_readiness_checks(array $settings): array
 
 function app_update_campaign_status(string $campaignId, string $status): array
 {
+    return app_with_queue_lock(static fn (): array => app_update_campaign_status_locked($campaignId, $status));
+}
+
+function app_update_campaign_status_locked(string $campaignId, string $status): array
+{
     $status = strtolower(trim($status));
     if (!in_array($status, ['draft', 'scheduled', 'running', 'paused'], true)) {
         throw new RuntimeException('Unsupported campaign status.');
@@ -1451,7 +1456,32 @@ function app_update_campaign_status(string $campaignId, string $status): array
     return app_state();
 }
 
+function app_with_queue_lock(callable $callback): mixed
+{
+    $lockPath = app_storage_path('queue.lock');
+    $handle = fopen($lockPath, 'c');
+    if ($handle === false) {
+        throw new RuntimeException('Queue lock could not be opened.');
+    }
+
+    try {
+        if (!flock($handle, LOCK_EX)) {
+            throw new RuntimeException('Queue lock could not be acquired.');
+        }
+
+        return $callback();
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
 function app_send_one(string $campaignId): array
+{
+    return app_with_queue_lock(static fn (): array => app_send_one_locked($campaignId));
+}
+
+function app_send_one_locked(string $campaignId): array
 {
     $state = app_state();
     $found = app_find_campaign($state, $campaignId);
@@ -1519,6 +1549,11 @@ function app_send_one(string $campaignId): array
 
 function app_complete_campaign(string $campaignId): array
 {
+    return app_with_queue_lock(static fn (): array => app_complete_campaign_locked($campaignId));
+}
+
+function app_complete_campaign_locked(string $campaignId): array
+{
     $state = app_state();
     $found = app_find_campaign($state, $campaignId);
     if ($found === null) {
@@ -1549,6 +1584,11 @@ function app_complete_campaign(string $campaignId): array
 }
 
 function app_dispatch_due_campaigns(): array
+{
+    return app_with_queue_lock(static fn (): array => app_dispatch_due_campaigns_locked());
+}
+
+function app_dispatch_due_campaigns_locked(): array
 {
     $state = app_state();
     $changed = false;
@@ -1617,7 +1657,7 @@ function app_dispatch_due_campaigns(): array
             continue;
         }
 
-        $state = app_send_one((string) ($campaign['id'] ?? ''));
+        $state = app_send_one_locked((string) ($campaign['id'] ?? ''));
     }
 
     if ($changed) {

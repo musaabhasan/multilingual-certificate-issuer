@@ -10,6 +10,7 @@ const queueReadinessFilter = document.querySelector("#queueReadinessFilter");
 let queueRefreshInFlight = false;
 let queueActionInFlight = false;
 let queueWorkerInFlight = false;
+let queueTickInFlight = false;
 let autoQueueEnabled = true;
 const queueRecipientFilters = new Map();
 
@@ -247,6 +248,18 @@ async function runAutoQueue() {
     setQueueStatus(error.message, "warning");
   } finally {
     queueWorkerInFlight = false;
+  }
+}
+
+async function queueTick() {
+  if (queueTickInFlight || queueActionInFlight || queueRefreshInFlight || queueWorkerInFlight) return;
+  queueTickInFlight = true;
+
+  try {
+    await refreshQueueState();
+    await runAutoQueue();
+  } finally {
+    queueTickInFlight = false;
   }
 }
 
@@ -646,7 +659,5 @@ function cssEscape(value) {
 
 setQueueStatus("Loading queue", "pending");
 renderAutoQueueButton();
-void refreshQueueState();
-void runAutoQueue();
-setInterval(refreshQueueState, 5000);
-setInterval(runAutoQueue, 5000);
+void queueTick();
+setInterval(queueTick, 5000);
