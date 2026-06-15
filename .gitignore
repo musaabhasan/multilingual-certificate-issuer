@@ -5,6 +5,7 @@ storage/certificates/
 storage/uploads/
 storage/logs/
 storage/private/
+storage/app/
 coverage/
 *.log
 *.pdf

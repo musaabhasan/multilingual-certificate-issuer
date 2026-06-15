@@ -2,7 +2,7 @@
 
 A secure PHP 8.3 and MySQL 8.0 platform for designing, generating, and distributing bilingual Arabic/English digital certificates at scale.
 
-The platform replaces manual certificate creation with a controlled pipeline: template design, CSV data import, PDF/A generation, SMTP delivery, throttled queues, scheduling, MFA-protected administration, encrypted credentials, and audit logs.
+The platform replaces manual certificate creation with a controlled pipeline: template design, CSV data import, PDF/A generation, SMTP or Microsoft Graph delivery, throttled queues, scheduling, password-protected administration, encrypted credentials, rate limits, and audit logs.
 
 ## Core Capabilities
 
@@ -15,7 +15,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | PDF generation | PDF/A certificate output | mPDF renderer with embedded fonts, positioned HTML, deterministic storage paths |
 | Bilingual rendering QA | Pre-release proofing workflow | Arabic shaping, RTL/LTR, mixed text, font embedding, PDF/A, QR placement, accessibility, and evidence checks |
 | PDF accessibility remediation | Inclusive certificate repair workflow | Reading order, language metadata, contrast, QR fallback text, font embedding, print proof, hash reconciliation, and reissue evidence |
-| Distribution | Secure SMTP delivery | PHPMailer, TLS/SSL, encrypted SMTP credentials, per-recipient queue rows |
+| Distribution | Secure email delivery | PHPMailer SMTP with TLS/SSL or Microsoft Graph Mail.Send, encrypted credentials, per-recipient queue rows |
 | Throttling | Controlled sending speed | Queue worker with configurable delay, retry counters, scheduled delivery |
 | Deliverability | Sender reputation and abuse controls | SPF/DKIM/DMARC readiness, bounce handling, suppression, approval gates |
 | SMTP alignment audit | Sender-domain release gate | From-domain alignment, SPF, DKIM, DMARC, return-path, bounce/complaint handling, TLS, approval, and throttle checks |
@@ -40,7 +40,7 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | Support case redaction | Safe evidence sharing | Redaction rules for verification tickets, delivery disputes, corrections, revocations, vendor support, and audit samples |
 | Email templates | Dynamic message content | `{{tag}}` rendering, nested field lookup, and missing-variable validation |
 | Import safety | Upload and CSV controls | MIME checks, size limits, required headers, formula-prefix neutralization |
-| Security | MFA, password rotation, audit logs | TOTP-ready schema, password policy fields, administrative action logging |
+| Security | Authentication, administrator MFA, password rotation, audit logs | First-run administrator setup, TOTP enrollment, hashed recovery codes, password policy fields, administrative action logging |
 | Deployment readiness | Production hosting guidance | Self-hosted deployment, MySQL encryption guidance, private storage controls |
 
 ## Repository Structure
@@ -49,13 +49,14 @@ The platform replaces manual certificate creation with a controlled pipeline: te
 | --- | --- |
 | `src/Certificate` | CSV mapping, template layout validation, PDF rendering |
 | `src/Database` | PDO connection factory |
-| `src/Mail` | Encrypted SMTP profile handling and certificate mailer |
+| `src/Mail` | Encrypted mail profile handling and certificate mailer |
 | `src/Queue` | Throttled distribution worker |
-| `src/Security` | Encryption, MFA/password policy helpers, audit logging |
+| `src/Security` | Encryption, password policy helpers, audit logging |
 | `public` | Dashboard, designer, import, queue, and verification UI surfaces |
 | `database/schema.sql` | MySQL 8.0 schema with bilingual-safe collations |
 | `docs` | Architecture, security model, deployment, and project plan |
 | `examples` | Sample Arabic/English CSV and template layout |
+| `examples/visual-regression` | Deterministic bilingual PDF proof fixtures |
 
 ## Documentation
 
@@ -109,10 +110,10 @@ Open:
 - Mailpit SMTP viewer: <http://localhost:8025>
 - MySQL: `localhost:3307`
 
-Run the worker once:
+Run the server-backed campaign worker once:
 
 ```bash
-docker compose run --rm worker php bin/queue-worker.php --once
+docker compose run --rm worker php bin/platform-worker.php --once
 ```
 
 Run PHP syntax checks:
@@ -149,6 +150,12 @@ Run the template asset integrity audit:
 
 ```bash
 php bin/template-asset-audit-demo.php examples/template-asset-manifest-sample.json
+```
+
+Generate the Arabic/English PDF visual regression proof set:
+
+```bash
+php bin/pdf-visual-regression-samples.php
 ```
 
 Run the SMTP domain alignment audit:
@@ -194,8 +201,10 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 
 - Store application secrets outside Git.
 - Generate a 32-byte sodium key for `APP_KEY`.
-- Encrypt SMTP passwords before database storage.
-- Enforce MFA for administrators.
+- Encrypt SMTP passwords and Microsoft Graph client secrets before database storage.
+- Create the first administrator account during setup and enforce the password policy for all users.
+- Require administrator MFA enrollment before access to protected management pages.
+- Store TOTP secrets encrypted and recovery codes hashed; show recovery codes only at enrollment or regeneration.
 - Rotate passwords every 90 days.
 - Validate uploaded CSV, image, and font files by MIME type and size.
 - Remediate PDF accessibility defects before release, and reconcile any resulting PDF hash or verification changes.
@@ -210,8 +219,8 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 - Reconcile certificate hashes, queue records, SMTP events, bounces, suppression entries, and support disputes before batch closure.
 - Audit revoked certificates for reason, authority, timestamp order, hash preservation, token handling, and replacement links.
 - Record revocation and reissue decisions with source-of-truth evidence, recipient notification, public verification state, token impact, and closure proof.
-- Log authentication, template, SMTP, CSV, generation, and delivery actions.
-- Use TLS for SMTP and HTTPS for the application.
+- Log authentication, template, mail delivery, CSV, generation, and delivery actions.
+- Use TLS for SMTP, HTTPS for Microsoft Graph, and HTTPS for the application.
 - Verify sender domains with SPF, DKIM, and DMARC before bulk delivery.
 - Check hashed suppression records before sending to hard-bounced, complained, or manually held recipients.
 - Audit delivery suppression, retry, complaint, and release evidence before resuming or approving high-volume batches.
@@ -222,23 +231,28 @@ Templates are stored as JSON-backed rows and rendered into PDF/A. Each text elem
 Example CRON entry for a queue worker every minute:
 
 ```cron
-* * * * * cd /var/www/certificate-issuer && php bin/queue-worker.php >> storage/logs/worker.log 2>&1
+* * * * * cd /var/www/certificate-issuer && php bin/platform-worker.php --once >> storage/logs/worker.log 2>&1
 ```
 
-Each queue item has `scheduled_at`, `attempts`, `next_attempt_at`, `updated_at`, and `sent_at` fields. Delivery speed is controlled by `QUEUE_THROTTLE_SECONDS`. Jobs left in `processing` after a worker crash are recovered after `QUEUE_STALE_PROCESSING_MINUTES` minutes, then retried or marked failed according to the attempt counter.
+The platform worker dispatches due campaigns, sends at most the currently due recipient per campaign run, and respects each campaign's configured start/end window and randomized per-recipient buffer. For a long-running process, use:
+
+```bash
+php bin/platform-worker.php --sleep=10
+```
+
+Health checks are available at `/health.php`. A production deployment should return HTTP 200 after the first administrator is configured and storage is writable.
 
 ## Verification Flow
 
 Generated certificate jobs can store a public certificate number, a PDF SHA-256 hash, and a hashed verification token. The public verification page accepts the certificate number and token, then returns only safe certificate metadata.
 
-Recommended production additions:
+Production verification controls included in this branch:
 
-- QR code pointing to the verification route.
+- High-entropy verification tokens.
 - Rate limits on verification attempts.
 - Public response that confirms validity without exposing private CSV data.
-- Administrative report of verification lookups.
-- Revocation workflow for withdrawn, corrected, duplicate, or unauthorized certificates.
-- Revocation ledger audit before publishing replacement or withdrawal evidence.
+- Audit entries for verification successes and failures.
+- Revocation workflow documentation and ledger audit tooling for withdrawn, corrected, duplicate, or unauthorized certificates.
 - Batch hash manifest for audit evidence, storage migration, and tamper investigation.
 - Verification receipt export for support cases, recipient disputes, and audit sampling.
 - Verification token rotation runbook for scheduled lifecycle review, exposed links, reissued certificates, and abuse investigations.
@@ -254,7 +268,7 @@ Recommended production additions:
 
 ## Project Phases
 
-1. Core infrastructure, database, authentication, MFA, SMTP encryption.
+1. Core infrastructure, database, authentication, password policy, SMTP encryption.
 2. Visual template designer and bilingual PDF rendering.
 3. CSV import, dynamic mapping, email template editor, throttled queue.
 4. UAT, hardening, vulnerability assessment, and production deployment.
@@ -283,7 +297,7 @@ MIT
 <!-- portfolio:start -->
 ## Portfolio and Professional Profile
 
-This repository is part of the professional portfolio of [Musaab Hasan](https://musaab.info), focused on cybersecurity, digital forensics, AI governance, EdTech, secure platforms, and research-driven digital transformation.
+This repository is part of the professional portfolio of [Musaab Hasan](https://musaab.info), focused on cybersecurity, digital forensics, technology governance, EdTech, secure platforms, and research-driven digital transformation.
 
 ### Digital Forensics and Security Research Labs
 
@@ -304,14 +318,11 @@ This repository is part of the professional portfolio of [Musaab Hasan](https://
 - [Behavioral Security Metrics Portal](https://github.com/musaabhasan/behavioral-security-metrics-portal) - Evidence-based security awareness metrics portal focused on behavior, culture, and intervention outcomes.
 - [Security Culture Heatmap Portal](https://github.com/musaabhasan/security-culture-heatmap-portal) - Security culture maturity heatmap for norms, leadership signals, and organizational readiness.
 - [Emerging Technology Security Culture Portal](https://github.com/musaabhasan/emerging-technology-security-culture-portal) - Adoption-readiness portal for emerging technology, governance, and security culture alignment.
-- [AI Use Case Evaluation Portal](https://github.com/musaabhasan/ai-use-case-evaluation-portal) - Evaluation platform for AI use cases across value, feasibility, data readiness, privacy, ethics, and governance.
 - [Transformation Roadmap Portal](https://github.com/musaabhasan/transformation-roadmap-portal) - Roadmap platform for moving security culture programs from compliance orientation to resilience and measurable change.
 
 ### Governance, Education, and Secure Enablement
 
 - [Professional Development Registration System Framework](https://github.com/musaabhasan/pdrs-framework) - Secure registration and Moodle enrollment automation framework for professional development programs.
 - [Multilingual Certificate Issuer](https://github.com/musaabhasan/multilingual-certificate-issuer) - Arabic/English certificate design, PDF generation, and throttled SMTP distribution platform.
-- [AI Security Governance Toolkit](https://github.com/musaabhasan/ai-security-governance-toolkit) - Practical AI security governance controls, templates, evidence registers, playbooks, and policy-as-code examples.
-
 Professional profile and research portfolio: [https://musaab.info](https://musaab.info)
 <!-- portfolio:end -->

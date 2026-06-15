@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/platform.php';
+
+app_require_auth();
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -15,10 +19,13 @@ declare(strict_types=1);
 <header class="topbar">
     <a class="brand" href="/">Certificate Issuer</a>
     <nav aria-label="Primary navigation">
+        <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html">Import</a>
         <a href="/queue.html">Queue</a>
         <a href="/verify.php">Verify</a>
+        <a href="/mfa.php">MFA</a>
+        <a href="/admin.php">Admin</a>
+        <a href="/logout.php">Logout</a>
     </nav>
 </header>
 
@@ -27,33 +34,33 @@ declare(strict_types=1);
         <div>
             <p class="eyebrow">Credential operations</p>
             <h1>Issuance dashboard</h1>
-            <p>Manage bilingual templates, recipient batches, PDF generation, and controlled SMTP distribution.</p>
+            <p>Manage campaign templates, recipient CSV uploads, PDF generation, and controlled SMTP distribution.</p>
         </div>
         <div class="actions">
-            <a class="button primary" href="/designer.html">New template</a>
-            <a class="button" href="/import.html">Import CSV</a>
+            <a class="button primary" href="/campaigns.html">Create campaign</a>
+            <a class="button" href="/designer.html">Advanced designer</a>
         </div>
     </section>
 
     <section class="metric-grid" aria-label="Operational metrics">
         <article class="metric">
             <span class="metric-label">Templates</span>
-            <strong>12</strong>
-            <span class="metric-note positive">4 approved</span>
+            <strong id="dashboardTemplates">0</strong>
+            <span id="dashboardApprovedTemplates" class="metric-note positive">0 approved</span>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Campaigns</span>
+            <strong id="dashboardCampaigns">0</strong>
+            <span id="dashboardActiveCampaigns" class="metric-note">0 active</span>
         </article>
         <article class="metric">
             <span class="metric-label">Queued mail</span>
-            <strong>248</strong>
-            <span class="metric-note">60 sec throttle</span>
-        </article>
-        <article class="metric">
-            <span class="metric-label">Rendered PDFs</span>
-            <strong>1,420</strong>
-            <span class="metric-note positive">PDF/A ready</span>
+            <strong id="dashboardQueued">0</strong>
+            <span class="metric-note positive">Across campaigns</span>
         </article>
         <article class="metric">
             <span class="metric-label">Failed sends</span>
-            <strong>3</strong>
+            <strong id="dashboardFailed">0</strong>
             <span class="metric-note warning">Needs review</span>
         </article>
     </section>
@@ -61,30 +68,41 @@ declare(strict_types=1);
     <section class="workspace">
         <article class="panel span-2">
             <div class="panel-header">
-                <div>
-                    <h2>Issuance workflow</h2>
-                    <p>Current batch: Cybersecurity Awareness May 2026</p>
-                </div>
-                <span class="status ready">Ready to schedule</span>
+                <h2>Operational workflow</h2>
+                <a href="/campaigns.html">Continue</a>
             </div>
-            <ol class="stepper">
-                <li class="done"><span>1</span><div><strong>Template approved</strong><p>Arabic and English fields aligned on A4 landscape.</p></div></li>
-                <li class="done"><span>2</span><div><strong>CSV validated</strong><p>Unique identifiers, emails, names, and issue dates passed checks.</p></div></li>
-                <li class="active"><span>3</span><div><strong>PDF generation</strong><p>Rendering queue is producing private certificate files.</p></div></li>
-                <li><span>4</span><div><strong>SMTP distribution</strong><p>Delivery starts after approval and schedule confirmation.</p></div></li>
-            </ol>
+            <div id="dashboardWorkflow" class="workflow-list"></div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <h2>Needs attention</h2>
+                <a href="/queue.html">Queue</a>
+            </div>
+            <div id="dashboardAttention" class="attention-list"></div>
+        </article>
+
+        <article class="panel span-2">
+            <div class="panel-header">
+                <div>
+                    <h2>Active campaigns</h2>
+                    <p>Separate template, import, schedule, and delivery state per campaign.</p>
+                </div>
+                <a href="/campaigns.html">Manage all</a>
+            </div>
+            <div id="dashboardCampaignList" class="mini-list"></div>
         </article>
 
         <article class="panel">
             <div class="panel-header">
                 <h2>Security posture</h2>
-                <span class="status locked">MFA enforced</span>
+                <span class="status ready">Login active</span>
             </div>
             <ul class="check-list">
-                <li>SMTP credentials encrypted</li>
-                <li>Generated PDFs stored privately</li>
+                <li>Username and password required for management pages</li>
+                <li>SMTP password encrypted at rest</li>
+                <li>Uploads and API changes protected by CSRF tokens</li>
                 <li>Admin action audit enabled</li>
-                <li>Password rotation policy active</li>
             </ul>
         </article>
 
@@ -95,11 +113,7 @@ declare(strict_types=1);
             </div>
             <table class="compact-table">
                 <thead><tr><th>Status</th><th>Recipient</th><th>Time</th></tr></thead>
-                <tbody>
-                <tr><td><span class="pill sent">Sent</span></td><td>aisha@example.edu</td><td>09:12</td></tr>
-                <tr><td><span class="pill queued">Queued</span></td><td>omar@example.edu</td><td>09:13</td></tr>
-                <tr><td><span class="pill failed">Retry</span></td><td>fatima@example.edu</td><td>09:14</td></tr>
-                </tbody>
+                <tbody id="dashboardRecentEvents"><tr><td colspan="3">No queue events yet.</td></tr></tbody>
             </table>
         </article>
 
@@ -117,5 +131,8 @@ declare(strict_types=1);
         </article>
     </section>
 </main>
+<script src="/assets/app-auth.js"></script>
+<script src="/assets/app-state.js"></script>
+<script src="/assets/dashboard.js"></script>
 </body>
 </html>

@@ -10,58 +10,86 @@
 <header class="topbar">
     <a class="brand" href="/">Certificate Issuer</a>
     <nav aria-label="Primary navigation">
+        <a href="/campaigns.html">Campaigns</a>
         <a href="/designer.html">Designer</a>
-        <a href="/import.html">Import</a>
         <a href="/queue.html" aria-current="page">Queue</a>
         <a href="/verify.php">Verify</a>
+        <a href="/mfa.php">MFA</a>
+        <a href="/admin.php">Admin</a>
+        <a href="/logout.php">Logout</a>
     </nav>
 </header>
 <main class="shell">
     <section class="page-title compact">
         <div>
-            <p class="eyebrow">SMTP distribution</p>
+            <p class="eyebrow">Certificate distribution</p>
             <h1>Queue monitor</h1>
             <p>Track scheduled delivery, retry behavior, throttling, and failed messages.</p>
         </div>
         <div class="actions">
-            <button class="primary" type="button">Start batch</button>
-            <button type="button">Pause queue</button>
+            <a class="button primary" href="/campaigns.html">New campaign</a>
+            <a class="button" href="/campaigns.html">Campaign assets</a>
+            <button id="toggleAutoQueue" type="button">Auto queue on</button>
+            <button id="processDueQueue" type="button">Process due now</button>
+            <button id="refreshQueue" type="button">Refresh</button>
         </div>
     </section>
 
     <section class="metric-grid">
-        <article class="metric"><span class="metric-label">Pending</span><strong>248</strong><span class="metric-note">Scheduled</span></article>
-        <article class="metric"><span class="metric-label">Sent</span><strong>1,172</strong><span class="metric-note positive">Delivered</span></article>
-        <article class="metric"><span class="metric-label">Retries</span><strong>11</strong><span class="metric-note warning">15 min backoff</span></article>
-        <article class="metric"><span class="metric-label">Throttle</span><strong>60s</strong><span class="metric-note">Per message</span></article>
+        <article class="metric"><span class="metric-label">Pending</span><strong id="queuePending">0</strong><span class="metric-note">Scheduled</span></article>
+        <article class="metric"><span class="metric-label">Sent</span><strong id="queueSent">0</strong><span class="metric-note positive">Delivered</span></article>
+        <article class="metric"><span class="metric-label">Failed</span><strong id="queueFailed">0</strong><span class="metric-note warning">Needs review</span></article>
+        <article class="metric"><span class="metric-label">Avg spacing</span><strong id="queueSpacing">0s</strong><span class="metric-note">Slowest active lane</span></article>
     </section>
 
     <section class="workspace">
         <article class="panel span-2">
             <div class="panel-header">
-                <h2>Delivery timeline</h2>
-                <span class="status ready">Worker healthy</span>
+                <h2>Campaign queues</h2>
+                <span id="queueWorkerStatus" class="status ready">Worker healthy</span>
             </div>
-            <table class="data-table">
-                <thead><tr><th>Recipient</th><th>Status</th><th>Attempts</th><th>Next action</th></tr></thead>
-                <tbody>
-                <tr><td>aisha@example.edu</td><td><span class="pill sent">Sent</span></td><td>1</td><td>Completed</td></tr>
-                <tr><td>omar@example.edu</td><td><span class="pill queued">Pending</span></td><td>0</td><td>09:18</td></tr>
-                <tr><td>fatima@example.edu</td><td><span class="pill failed">Retry</span></td><td>2</td><td>09:31</td></tr>
-                </tbody>
-            </table>
+            <div class="list-toolbar queue-toolbar">
+                <label>Find campaign
+                    <input id="queueSearch" type="search" placeholder="Campaign, CSV, template, recipient">
+                </label>
+                <label>Status
+                    <select id="queueStatusFilter">
+                        <option value="all">All statuses</option>
+                        <option value="active">Active</option>
+                        <option value="draft">Draft</option>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="running">Running</option>
+                        <option value="paused">Paused</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </label>
+                <label>Readiness
+                    <select id="queueReadinessFilter">
+                        <option value="all">All readiness</option>
+                        <option value="ready">Ready to send</option>
+                        <option value="review">Needs review</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </label>
+            </div>
+            <div id="queueCampaignList" class="campaign-grid compact-campaign-grid"></div>
         </article>
 
         <article class="panel">
-            <h2>SMTP profile</h2>
+            <h2>Delivery profile</h2>
             <dl class="detail-list">
-                <div><dt>Host</dt><dd>smtp.example.edu</dd></div>
-                <div><dt>Encryption</dt><dd>TLS</dd></div>
-                <div><dt>Credential</dt><dd>Encrypted</dd></div>
-                <div><dt>From</dt><dd>certificates@example.edu</dd></div>
+                <div><dt>Mode</dt><dd id="smtpMode">Loading</dd></div>
+                <div><dt>Host</dt><dd id="smtpHost">Loading</dd></div>
+                <div><dt>Encryption</dt><dd id="smtpEncryption">Loading</dd></div>
+                <div><dt>Credential</dt><dd id="smtpCredential">Loading</dd></div>
+                <div><dt>From</dt><dd id="smtpFrom">Loading</dd></div>
             </dl>
         </article>
     </section>
 </main>
+<script src="/assets/app-auth.js"></script>
+<script src="/assets/app-state.js"></script>
+<script src="/assets/app-preview.js"></script>
+<script src="/assets/queue.js"></script>
 </body>
 </html>

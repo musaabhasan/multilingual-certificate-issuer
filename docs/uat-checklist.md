@@ -49,7 +49,7 @@ Use synthetic Arabic and English recipient records. Do not use real student or p
 
 | Test | Expected Result | Pass |
 | --- | --- | --- |
-| Admin login without MFA | Access is blocked after MFA enforcement |  |
+| Weak admin password | Account creation or password change is rejected |  |
 | Expired password | Password rotation is required |  |
 | Unauthorized role | Access to restricted action is denied |  |
 | Audit log review | Action is recorded with actor and metadata |  |

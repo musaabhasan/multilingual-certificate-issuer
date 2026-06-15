@@ -30,7 +30,7 @@ flowchart LR
 
 | Component | Responsibility |
 | --- | --- |
-| Web application | Authentication, MFA, template management, CSV import, scheduling, reporting |
+| Web application | Authentication, role-based access, template management, CSV import, scheduling, reporting |
 | Template designer | Visual placement of text elements over uploaded image backgrounds |
 | PDF renderer | Converts layout JSON and recipient rows into PDF/A certificates |
 | SMTP module | Stores encrypted SMTP profiles and sends attachments through TLS/SSL |

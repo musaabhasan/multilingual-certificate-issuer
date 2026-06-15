@@ -4,7 +4,7 @@
 
 | Threat | Control |
 | --- | --- |
-| Stolen administrator password | MFA, password rotation, session timeout, audit logs |
+| Stolen administrator password | Strong password policy, mandatory administrator MFA, password rotation, session timeout, rate limits, audit logs |
 | SMTP credential leakage | Sodium encryption, `.env` key separation, restricted database access |
 | CSV injection or malformed data | Header validation, row limits, formula-prefix neutralization before export |
 | Over-collected recipient personal data | Approved data dictionary, recipient data minimization audit, retention review |
@@ -19,18 +19,20 @@
 
 | Role | Permissions |
 | --- | --- |
-| Administrator | Manage users, MFA policy, SMTP profiles, system settings |
+| Administrator | Manage users, SMTP profiles, system settings |
 | Designer | Create and update certificate templates |
 | Operator | Upload CSV files, generate certificates, schedule delivery |
 | Auditor | Read-only access to audit logs, batches, and delivery reports |
 
 ## Authentication Requirements
 
-- MFA must be enabled for administrators.
+- Administrator accounts must use the enforced password policy.
+- Administrator accounts must enroll TOTP MFA before accessing protected management pages.
+- MFA recovery codes are shown once, stored as hashes, and consumed after use.
 - Passwords must be hashed with `password_hash`.
 - Privileged passwords rotate every 90 days.
 - Sessions expire after inactivity.
-- Failed login attempts should lock accounts or trigger review.
+- Failed login attempts are rate-limited and should be reviewed in audit logs.
 
 ## Credential Storage
 
@@ -53,7 +55,7 @@ Keep `APP_KEY` outside the repository and back it up securely. If it is lost, en
 At minimum, log:
 
 - login success and failure,
-- MFA enrollment and reset,
+- MFA enrollment, verification, recovery-code use, and recovery-code regeneration,
 - SMTP profile create/update/test,
 - template create/update/approve/retire,
 - CSV upload and mapping,

@@ -1,14 +1,18 @@
 {
   "name": "musaabhasan/multilingual-certificate-issuer",
-  "description": "Secure multilingual certificate issuance and SMTP distribution platform for Arabic and English digital credentials.",
+  "description": "Secure multilingual certificate issuance and email distribution platform for Arabic and English digital credentials.",
   "type": "project",
   "license": "MIT",
   "require": {
     "php": "^8.3",
+    "ext-curl": "*",
+    "ext-gd": "*",
     "ext-intl": "*",
+    "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-pdo_mysql": "*",
     "ext-sodium": "*",
+    "endroid/qr-code": "^5.1",
     "mpdf/mpdf": "^8.2",
     "phpmailer/phpmailer": "^6.9",
     "ramsey/uuid": "^4.7",
@@ -27,7 +31,10 @@
     "revocation-ledger-audit": "php bin/revocation-ledger-audit-demo.php",
     "smtp-domain-alignment-audit": "php bin/smtp-domain-alignment-audit-demo.php",
     "template-asset-audit": "php bin/template-asset-audit-demo.php",
-    "worker": "php bin/queue-worker.php"
+    "pdf-visual-regression": "php bin/pdf-visual-regression-samples.php",
+    "queue-state-merge-regression": "php bin/queue-state-merge-regression.php",
+    "worker": "php bin/platform-worker.php",
+    "db-worker": "php bin/queue-worker.php"
   },
   "config": {
     "sort-packages": true,

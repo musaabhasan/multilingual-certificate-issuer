@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Campaigns</title>
+    <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="/">Certificate Issuer</a>
+    <nav aria-label="Primary navigation">
+        <a href="/campaigns.html" aria-current="page">Campaigns</a>
+        <a href="/designer.html">Designer</a>
+        <a href="/queue.html">Queue</a>
+        <a href="/verify.php">Verify</a>
+        <a href="/mfa.php">MFA</a>
+        <a href="/admin.php">Admin</a>
+        <a href="/logout.php">Logout</a>
+    </nav>
+</header>
+
+<main class="shell">
+    <section class="page-title compact">
+        <div>
+            <p class="eyebrow">Campaign operations</p>
+            <h1>Campaigns</h1>
+            <p>Create each certificate campaign with its own template, recipient CSV, delivery schedule, and email content.</p>
+        </div>
+        <div class="actions">
+            <a class="button" href="/samples/recipient-import-sample.csv" download>Download sample CSV</a>
+        </div>
+    </section>
+
+    <section class="metric-grid">
+        <article class="metric"><span class="metric-label">Campaigns</span><strong id="campaignMetric">0</strong><span class="metric-note">Total</span></article>
+        <article class="metric"><span class="metric-label">Active</span><strong id="activeMetric">0</strong><span class="metric-note positive">Running or scheduled</span></article>
+        <article class="metric"><span class="metric-label">Recipients</span><strong id="recipientMetric">0</strong><span class="metric-note">Across campaigns</span></article>
+        <article class="metric"><span class="metric-label">Templates</span><strong id="templateMetric">0</strong><span class="metric-note">Reusable layouts</span></article>
+    </section>
+
+    <section class="workspace">
+        <article class="panel span-3">
+            <div class="panel-header">
+                <h2>New campaign</h2>
+                <span class="status ready">Server saved</span>
+            </div>
+            <form id="campaignForm" class="campaign-wizard">
+                <ol class="wizard-steps" aria-label="Campaign creation steps">
+                    <li class="active" data-wizard-step-indicator="csv"><button type="button" data-wizard-step-target="csv"><span>1</span><strong>CSV and labels</strong></button></li>
+                    <li data-wizard-step-indicator="design"><button type="button" data-wizard-step-target="design"><span>2</span><strong>Certificate design</strong></button></li>
+                    <li data-wizard-step-indicator="sending"><button type="button" data-wizard-step-target="sending"><span>3</span><strong>Sending plan</strong></button></li>
+                    <li data-wizard-step-indicator="review"><button type="button" data-wizard-step-target="review"><span>4</span><strong>Review and track</strong></button></li>
+                </ol>
+
+                <section class="wizard-step active" data-wizard-step="csv">
+                    <div class="wizard-step-header">
+                        <div>
+                            <p class="eyebrow">Step 1</p>
+                            <h3>Upload the recipient CSV and map fields</h3>
+                            <p>The CSV defines each recipient and every variable available in certificates and email messages.</p>
+                        </div>
+                        <a class="button" href="/samples/recipient-import-sample.csv" download>Sample CSV</a>
+                    </div>
+                    <div class="form-grid">
+                        <label>Campaign name <input id="campaignName" type="text" required value="New Certificate Campaign"></label>
+                        <label>Creation state
+                            <select id="campaignStatus">
+                                <option value="draft">Draft - start manually</option>
+                            </select>
+                        </label>
+                        <label class="wide-field">Dedicated CSV file
+                            <input id="campaignCsvFile" type="file" accept=".csv,text/csv">
+                        </label>
+                        <div class="csv-summary full-field">
+                            <span id="campaignCsvStatus" class="status locked">No CSV selected</span>
+                            <span id="campaignCsvFileName">Upload a recipient CSV for this campaign.</span>
+                            <strong><span id="campaignCsvRows">0</span> rows</strong>
+                            <strong><span id="campaignCsvLabels">0</span> labels</strong>
+                        </div>
+                        <div class="table-scroll full-field">
+                            <table class="data-table compact-preview">
+                                <thead><tr><th>Recipient field</th><th>CSV column</th><th>Status</th></tr></thead>
+                                <tbody id="campaignCsvMapping">
+                                <tr><td>Email address</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Unique identifier</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Recipient name</td><td>Select after upload</td><td><span class="pill failed">Required</span></td></tr>
+                                <tr><td>Arabic name</td><td>Optional</td><td><span class="pill queued">Optional</span></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-scroll full-field">
+                            <table id="campaignCsvPreview" class="data-table compact-preview">
+                                <thead><tr><th>Preview</th><th>Status</th></tr></thead>
+                                <tbody><tr><td>Select a CSV to preview the first rows.</td><td><span class="pill queued">Waiting</span></td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="wizard-step" data-wizard-step="design" hidden>
+                    <div class="wizard-step-header">
+                        <div>
+                            <p class="eyebrow">Step 2</p>
+                            <h3>Select or upload the certificate design</h3>
+                            <p>Choose a reusable template or upload a campaign-specific certificate background.</p>
+                        </div>
+                        <a class="button" href="/designer.html">Open designer</a>
+                    </div>
+                    <div class="wizard-split">
+                        <div class="form-grid">
+                            <label>Template source
+                                <select id="campaignTemplateMode">
+                                    <option value="saved">Use saved template</option>
+                                    <option value="upload">Upload template for this campaign</option>
+                                </select>
+                            </label>
+                            <label class="wide-field" data-template-mode-panel="saved">Saved template
+                                <select id="campaignTemplate"></select>
+                            </label>
+                            <label data-template-mode-panel="upload">Template name
+                                <input id="campaignTemplateName" type="text" value="Campaign certificate template">
+                            </label>
+                            <label data-template-mode-panel="upload">Background fit
+                                <select id="campaignTemplateFit">
+                                    <option value="stretch">Stretch to page</option>
+                                    <option value="contain">Contain inside page</option>
+                                    <option value="cover">Cover page</option>
+                                </select>
+                            </label>
+                            <label class="wide-field" data-template-mode-panel="upload">Template image
+                                <input id="campaignTemplateFile" type="file" accept="image/png,image/jpeg,image/webp">
+                            </label>
+                            <div class="template-upload-summary full-field" data-template-mode-panel="upload">
+                                <span id="campaignTemplateStatus" class="status locked">No template image selected</span>
+                                <span id="campaignTemplatePreview">Upload a PNG, JPG, or WebP certificate background. Recipient name, program, date, and QR fields will be added automatically.</span>
+                            </div>
+                            <div class="template-field-map full-field">
+                                <div class="template-field-map-header">
+                                    <strong>Template field mapping</strong>
+                                    <span id="campaignTemplateFieldStatus" class="status locked">Select a template</span>
+                                </div>
+                                <div id="campaignTemplateFieldMapping" class="template-field-map-list">
+                                    <p class="subtle-note">Template fields appear here after you select a design.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="wizard-preview-panel">
+                            <div class="wizard-preview-toolbar">
+                                <span id="wizardTemplatePreviewSample" class="status locked">Upload CSV to preview a recipient</span>
+                                <button id="wizardTemplatePreviewShuffle" type="button">Random sample</button>
+                            </div>
+                            <div id="wizardTemplatePreview" class="wizard-certificate-preview">
+                                <span>Certificate preview</span>
+                                <strong>{{name_en}}</strong>
+                                <em>{{program_en}}</em>
+                                <small>QR</small>
+                            </div>
+                            <p id="wizardTemplatePreviewNote" class="subtle-note">Template preview updates after you select or upload a certificate design.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="wizard-step" data-wizard-step="sending" hidden>
+                    <div class="wizard-step-header">
+                        <div>
+                            <p class="eyebrow">Step 3</p>
+                            <h3>Set sending speed and email message</h3>
+                            <p>Configure the schedule, throttling, SMTP profile, and message body before launch.</p>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <label>Send start <input id="campaignStart" type="datetime-local"></label>
+                        <label>Send end <input id="campaignEnd" type="datetime-local" placeholder="Until complete"></label>
+                        <label>Delay unit
+                            <select id="campaignRandomUnit">
+                                <option value="seconds">Seconds</option>
+                                <option value="hundreds_seconds">Hundreds of seconds</option>
+                                <option value="minutes">Minutes</option>
+                                <option value="tens_minutes">Tens of minutes</option>
+                                <option value="hours">Hours</option>
+                            </select>
+                        </label>
+                        <label>Random delay min <input id="campaignRandomMin" type="number" min="0" step="0.01" value="45"></label>
+                        <label>Random delay max <input id="campaignRandomMax" type="number" min="0" step="0.01" value="75"></label>
+                        <div class="quick-actions full-field" aria-label="Schedule shortcuts">
+                            <button id="setCampaignStartNow" type="button">Start now</button>
+                            <button id="clearCampaignEnd" type="button">No end date</button>
+                            <button type="button" data-delay-preset-unit="seconds" data-delay-preset-min="45" data-delay-preset-max="75">45-75s</button>
+                            <button type="button" data-delay-preset-unit="minutes" data-delay-preset-min="2" data-delay-preset-max="5">2-5m</button>
+                            <button type="button" data-delay-preset-unit="tens_minutes" data-delay-preset-min="1" data-delay-preset-max="3">10-30m</button>
+                        </div>
+                        <label>SMTP profile <input id="campaignSmtp" type="text" value="Institution SMTP"></label>
+                        <label class="wide-field">Email subject <input id="campaignEmailSubject" type="text" value="Your certificate is ready"></label>
+                        <label class="wide-field">Email body
+                            <textarea id="campaignEmailBody" class="short-textarea email-body-input" spellcheck="true"><p>Hello {{name_en}},</p><p>Your certificate is attached as a PDF.</p></textarea>
+                        </label>
+                        <label class="checkbox-row wide-field"><input id="campaignIncludeVerificationLink" type="checkbox"> Append verification link when it is not already in the email body</label>
+                        <div class="token-row wide-field" aria-label="Email variables">
+                            <button type="button" data-email-token="{{name_en}}">name_en</button>
+                            <button type="button" data-email-token="{{name_ar}}">name_ar</button>
+                            <button type="button" data-email-token="{{program_en}}">program_en</button>
+                            <button type="button" data-email-token="{{certificate_number}}">certificate_number</button>
+                            <button type="button" data-email-token="{{verification_url}}">verification_url</button>
+                        </div>
+                        <div class="attachment-note">PDF attachment: <strong>certificate.pdf required</strong></div>
+                        <div class="plan-preview full-field" id="campaignPlanPreview">Add recipients to calculate exact spacing.</div>
+                    </div>
+                </section>
+
+                <section class="wizard-step" data-wizard-step="review" hidden>
+                    <div class="wizard-step-header">
+                        <div>
+                            <p class="eyebrow">Step 4</p>
+                            <h3>Review, create, and track delivery</h3>
+                            <p>Confirm the setup, create the campaign, then monitor delivery in campaign lanes or the queue page.</p>
+                        </div>
+                        <a class="button" href="/queue.html">Queue monitor</a>
+                    </div>
+                    <div id="wizardReviewSummary" class="wizard-review-grid"></div>
+                    <div class="plan-preview ready full-field">After creation, open the campaign details to preview individual certificates, start delivery, pause, retry, or review completion stats.</div>
+                </section>
+
+                <div class="wizard-actions">
+                    <button id="wizardBack" type="button">Back</button>
+                    <button id="wizardNext" type="button">Next</button>
+                    <button id="wizardCreate" class="primary" type="submit" hidden>Create campaign</button>
+                </div>
+            </form>
+        </article>
+
+        <article class="panel span-3">
+            <div class="panel-header">
+                <h2>Campaign lanes</h2>
+                <span id="campaignLaneStatus" class="status ready">Ready</span>
+            </div>
+            <div class="list-toolbar">
+                <label>Search <input id="campaignSearch" type="search" placeholder="Campaign, template, CSV, email"></label>
+                <label>Status
+                    <select id="campaignStatusFilter">
+                        <option value="all">All</option>
+                        <option value="draft">Draft</option>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="running">Running</option>
+                        <option value="paused">Paused</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </label>
+                <label>Sort
+                    <select id="campaignSort">
+                        <option value="updated_desc">Last updated</option>
+                        <option value="start_asc">Start time</option>
+                        <option value="pending_desc">Pending first</option>
+                        <option value="name_asc">Name</option>
+                    </select>
+                </label>
+            </div>
+            <div class="record-cleanup" aria-label="Delete old campaign records">
+                <div>
+                    <strong>Old campaign records</strong>
+                    <span id="campaignCleanupSummary">No records selected for deletion.</span>
+                </div>
+                <label>Delete scope
+                    <select id="campaignCleanupMode">
+                        <option value="completed">Completed only</option>
+                        <option value="paused_completed">Paused and completed</option>
+                        <option value="non_active">Draft, paused, and completed</option>
+                        <option value="filtered_non_active">Displayed non-active records</option>
+                    </select>
+                </label>
+                <label>Age
+                    <select id="campaignCleanupAge">
+                        <option value="0">Any age</option>
+                        <option value="7">Older than 7 days</option>
+                        <option value="30">Older than 30 days</option>
+                        <option value="90">Older than 90 days</option>
+                    </select>
+                </label>
+                <button id="deleteOldCampaignRecords" class="danger" type="button" disabled>Delete records</button>
+            </div>
+            <div id="campaignList" class="campaign-grid"></div>
+        </article>
+    </section>
+</main>
+<script src="/assets/app-auth.js"></script>
+<script src="/assets/app-state.js"></script>
+<script src="/assets/app-preview.js"></script>
+<script src="/assets/campaigns.js"></script>
+</body>
+</html>

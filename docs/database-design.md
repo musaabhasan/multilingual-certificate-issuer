@@ -16,8 +16,8 @@ This supports Arabic, English, symbols, and mixed-direction text. Application re
 
 | Table | Purpose |
 | --- | --- |
-| `users` | Administrative accounts, roles, MFA state, password age |
-| `mfa_secrets` | Encrypted TOTP secrets |
+| `users` | Administrative accounts, roles, password age |
+| `mfa_secrets` | Optional encrypted TOTP secrets for deployments that add a second factor |
 | `smtp_profiles` | Institutional SMTP settings with encrypted passwords |
 | `certificate_templates` | Approved and draft template layouts |
 | `certificate_template_versions` | Version history for layout changes |
