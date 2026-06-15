@@ -13,6 +13,7 @@ use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\RoundBlockSizeMode;
 use Endroid\QrCode\Writer\PngWriter;
+use Endroid\QrCode\Writer\SvgWriter;
 use PHPMailer\PHPMailer\PHPMailer;
 use RobThree\Auth\TwoFactorAuth;
 
@@ -1000,7 +1001,7 @@ function app_mfa_start_enrollment(string $userId): array
 
 function app_qr_data_uri(string $text, int $size = 260, int $margin = 12): string
 {
-    if (!class_exists(QrCode::class) || !extension_loaded('gd')) {
+    if (!class_exists(QrCode::class)) {
         return '';
     }
 
@@ -1013,6 +1014,14 @@ function app_qr_data_uri(string $text, int $size = 260, int $margin = 12): strin
             ->setRoundBlockSizeMode(RoundBlockSizeMode::Margin)
             ->setForegroundColor(new Color(15, 23, 42))
             ->setBackgroundColor(new Color(255, 255, 255));
+
+        if (class_exists(SvgWriter::class)) {
+            return (new SvgWriter())->write($qrCode)->getDataUri();
+        }
+
+        if (!extension_loaded('gd')) {
+            return '';
+        }
 
         return (new PngWriter())->write($qrCode)->getDataUri();
     } catch (Throwable) {
