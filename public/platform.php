@@ -218,6 +218,269 @@ function app_save_state(array $state): void
     app_write_json(app_storage_path('state.json'), app_validate_state($state));
 }
 
+function app_save_client_state(array $state): array
+{
+    return app_with_queue_lock(static function () use ($state): array {
+        $current = app_state();
+        $incoming = app_validate_state($state);
+        $merged = app_merge_client_state($incoming, $current);
+        app_save_state($merged);
+        return app_state();
+    });
+}
+
+function app_merge_client_state(array $incoming, array $current): array
+{
+    $currentCampaigns = [];
+    foreach ($current['campaigns'] ?? [] as $campaign) {
+        if (is_array($campaign) && trim((string) ($campaign['id'] ?? '')) !== '') {
+            $currentCampaigns[(string) $campaign['id']] = $campaign;
+        }
+    }
+
+    $campaigns = [];
+    foreach ($incoming['campaigns'] ?? [] as $campaign) {
+        if (!is_array($campaign)) {
+            continue;
+        }
+
+        $campaignId = (string) ($campaign['id'] ?? '');
+        if ($campaignId !== '' && isset($currentCampaigns[$campaignId])) {
+            $campaign = app_merge_client_campaign($campaign, $currentCampaigns[$campaignId]);
+        }
+
+        $campaigns[] = $campaign;
+    }
+
+    return [
+        'templates' => is_array($incoming['templates'] ?? null) ? array_values($incoming['templates']) : [],
+        'campaigns' => $campaigns,
+    ];
+}
+
+function app_merge_client_campaign(array $incoming, array $current): array
+{
+    if (app_client_requested_delivery_reset($incoming, $current)) {
+        return app_campaign_with_queue_counts($incoming);
+    }
+
+    $incomingQueue = is_array($incoming['recipientQueue'] ?? null) ? array_values($incoming['recipientQueue']) : [];
+    $currentQueue = is_array($current['recipientQueue'] ?? null) ? array_values($current['recipientQueue']) : [];
+    if ($incomingQueue === [] || $currentQueue === []) {
+        return $incoming;
+    }
+
+    $removeRequested = app_client_has_new_delivery_event($incoming, $current, [
+        'removed ',
+    ]);
+
+    $currentById = [];
+    foreach ($currentQueue as $recipient) {
+        if (is_array($recipient) && trim((string) ($recipient['id'] ?? '')) !== '') {
+            $currentById[(string) $recipient['id']] = $recipient;
+        }
+    }
+
+    $mergedQueue = [];
+    $seen = [];
+    foreach ($incomingQueue as $recipient) {
+        if (!is_array($recipient)) {
+            continue;
+        }
+
+        $recipientId = (string) ($recipient['id'] ?? '');
+        if ($recipientId !== '' && isset($currentById[$recipientId])) {
+            $seen[$recipientId] = true;
+            $recipient = app_merge_client_recipient($recipient, $currentById[$recipientId], $incoming, $current);
+        }
+
+        $mergedQueue[] = $recipient;
+    }
+
+    if (!$removeRequested) {
+        foreach ($currentById as $recipientId => $recipient) {
+            if (!isset($seen[$recipientId]) && app_recipient_has_delivery_progress($recipient)) {
+                $mergedQueue[] = $recipient;
+            }
+        }
+    }
+
+    $incoming['recipientQueue'] = $mergedQueue;
+    $incoming = app_campaign_with_queue_counts($incoming);
+
+    if (app_all_recipients_terminal($mergedQueue)) {
+        $incoming['status'] = 'completed';
+        $incoming['completedAt'] = (string) ($current['completedAt'] ?? $incoming['completedAt'] ?? app_now());
+        $incoming['nextSendAfterAt'] = '';
+    } elseif (app_campaign_has_delivery_progress($current) && in_array((string) ($incoming['status'] ?? ''), ['draft', 'completed'], true)) {
+        $incoming['status'] = (string) ($current['status'] ?? 'paused');
+        $incoming['completedAt'] = '';
+    }
+
+    return $incoming;
+}
+
+function app_campaign_with_queue_counts(array $campaign): array
+{
+    $queue = is_array($campaign['recipientQueue'] ?? null) ? array_values($campaign['recipientQueue']) : [];
+    $counts = app_recipient_status_counts($queue);
+    $campaign['recipientQueue'] = $queue;
+    $campaign['recipients'] = $counts['recipients'];
+    $campaign['rendered'] = $counts['rendered'];
+    $campaign['sent'] = $counts['sent'];
+    $campaign['failed'] = $counts['failed'];
+    $campaign['skipped'] = $counts['skipped'];
+
+    return $campaign;
+}
+
+function app_merge_client_recipient(array $incoming, array $current, array $incomingCampaign, array $currentCampaign): array
+{
+    if (!app_recipient_has_delivery_progress($current)) {
+        return $incoming;
+    }
+
+    $incomingStatus = (string) ($incoming['status'] ?? 'queued');
+    $currentStatus = (string) ($current['status'] ?? 'queued');
+    if ($incomingStatus === 'queued'
+        && in_array($currentStatus, ['sent', 'failed', 'skipped'], true)
+        && app_client_requested_recipient_retry($incomingCampaign, $currentCampaign, $incoming, $current)
+    ) {
+        return $incoming;
+    }
+
+    foreach (app_recipient_delivery_fields() as $field) {
+        if (array_key_exists($field, $current)) {
+            $incoming[$field] = $current[$field];
+        }
+    }
+
+    return $incoming;
+}
+
+function app_client_requested_delivery_reset(array $incoming, array $current): bool
+{
+    return app_client_has_new_delivery_event($incoming, $current, [
+        'campaign queue reset',
+        'csv data edited',
+        'recipients imported',
+    ]);
+}
+
+function app_client_has_new_delivery_event(array $incoming, array $current, array $needles): bool
+{
+    return app_new_delivery_event_messages($incoming, $current, $needles) !== [];
+}
+
+function app_new_delivery_event_messages(array $incoming, array $current, array $needles): array
+{
+    $messages = [];
+    $currentEvents = [];
+    foreach (is_array($current['deliveryEvents'] ?? null) ? $current['deliveryEvents'] : [] as $event) {
+        if (is_array($event)) {
+            $currentEvents[app_delivery_event_key($event)] = true;
+        }
+    }
+
+    foreach (is_array($incoming['deliveryEvents'] ?? null) ? $incoming['deliveryEvents'] : [] as $event) {
+        if (!is_array($event) || isset($currentEvents[app_delivery_event_key($event)])) {
+            continue;
+        }
+
+        $message = strtolower((string) ($event['message'] ?? ''));
+        foreach ($needles as $needle) {
+            if (str_contains($message, strtolower((string) $needle))) {
+                $messages[] = $message;
+                break;
+            }
+        }
+    }
+
+    return $messages;
+}
+
+function app_client_requested_recipient_retry(array $incomingCampaign, array $currentCampaign, array $incomingRecipient, array $currentRecipient): bool
+{
+    $messages = app_new_delivery_event_messages($incomingCampaign, $currentCampaign, [
+        'for resending',
+        'for retry',
+    ]);
+    if ($messages === []) {
+        return false;
+    }
+
+    $tokens = app_recipient_identity_tokens($incomingRecipient, $currentRecipient);
+    foreach ($messages as $message) {
+        foreach ($tokens as $token) {
+            if ($token !== '' && str_contains($message, $token)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function app_recipient_identity_tokens(array $incomingRecipient, array $currentRecipient): array
+{
+    $tokens = [];
+    foreach ([$incomingRecipient, $currentRecipient] as $recipient) {
+        $data = is_array($recipient['data'] ?? null) ? $recipient['data'] : [];
+        foreach (['displayName', 'email', 'identifier', 'id', 'nameEn', 'nameAr'] as $field) {
+            $tokens[] = strtolower(trim((string) ($recipient[$field] ?? '')));
+        }
+        foreach (['name_en', 'name_ar', 'full_name', 'name', 'email', 'unique_identifier', 'certificate_id'] as $field) {
+            $tokens[] = strtolower(trim((string) ($data[$field] ?? '')));
+        }
+    }
+
+    return array_values(array_unique(array_filter($tokens)));
+}
+
+function app_delivery_event_key(array $event): string
+{
+    return (string) ($event['at'] ?? '') . '|' . (string) ($event['message'] ?? '');
+}
+
+function app_recipient_has_delivery_progress(array $recipient): bool
+{
+    if (in_array((string) ($recipient['status'] ?? ''), ['rendered', 'sent', 'failed', 'skipped'], true)) {
+        return true;
+    }
+
+    foreach (app_recipient_delivery_fields() as $field) {
+        if (trim((string) ($recipient[$field] ?? '')) !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function app_campaign_has_delivery_progress(array $campaign): bool
+{
+    return (int) ($campaign['sent'] ?? 0) > 0
+        || (int) ($campaign['failed'] ?? 0) > 0
+        || (int) ($campaign['skipped'] ?? 0) > 0
+        || trim((string) ($campaign['completedAt'] ?? '')) !== '';
+}
+
+function app_recipient_delivery_fields(): array
+{
+    return [
+        'status',
+        'renderedAt',
+        'sentAt',
+        'failedAt',
+        'failedReason',
+        'skippedAt',
+        'certificatePath',
+        'verificationTokenHash',
+        'verificationIssuedAt',
+        'verificationUrl',
+    ];
+}
+
 function app_validate_state(array $state): array
 {
     $templates = is_array($state['templates'] ?? null) ? array_values($state['templates']) : [];

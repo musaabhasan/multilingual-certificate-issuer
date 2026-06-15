@@ -32,6 +32,7 @@
     "smtp-domain-alignment-audit": "php bin/smtp-domain-alignment-audit-demo.php",
     "template-asset-audit": "php bin/template-asset-audit-demo.php",
     "pdf-visual-regression": "php bin/pdf-visual-regression-samples.php",
+    "queue-state-merge-regression": "php bin/queue-state-merge-regression.php",
     "worker": "php bin/platform-worker.php",
     "db-worker": "php bin/queue-worker.php"
   },

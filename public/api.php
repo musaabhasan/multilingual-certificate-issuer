@@ -39,10 +39,10 @@ try {
     if ($action === 'state' && $method === 'POST') {
         app_require_write_access($user);
         $payload = app_json_payload();
-        app_save_state($payload);
+        $state = app_save_client_state($payload);
         app_audit('state.saved', 'state');
         app_json_response([
-            'state' => app_state(),
+            'state' => $state,
             'settings' => app_public_settings(),
             'csrf' => app_csrf_token(),
         ]);
