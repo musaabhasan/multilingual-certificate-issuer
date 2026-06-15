@@ -209,11 +209,11 @@ function app_state(): array
 {
     $state = app_read_json(app_storage_path('state.json'), app_seed_state());
     $deletedCampaignIds = is_array($state['deletedCampaignIds'] ?? null) ? $state['deletedCampaignIds'] : [];
-    return [
+    return app_normalize_state_layouts([
         'templates' => is_array($state['templates'] ?? null) ? $state['templates'] : [],
         'campaigns' => is_array($state['campaigns'] ?? null) ? $state['campaigns'] : [],
         'deletedCampaignIds' => app_normalized_deleted_campaign_ids($deletedCampaignIds),
-    ];
+    ]);
 }
 
 function app_save_state(array $state): void
@@ -287,6 +287,53 @@ function app_normalized_deleted_campaign_ids(array $ids): array
     }
 
     return array_slice(array_keys($normalized), -1000);
+}
+
+function app_normalize_layout_asset_reference(mixed $value): string
+{
+    $path = trim(str_replace('\\', '/', (string) $value));
+    return in_array(strtolower($path), ['', 'undefined', 'null', 'false', '#'], true) ? '' : $path;
+}
+
+function app_normalize_template_layout(array $layout): array
+{
+    $layout['background'] = app_normalize_layout_asset_reference($layout['background'] ?? '');
+
+    if (isset($layout['elements']) && is_array($layout['elements'])) {
+        foreach ($layout['elements'] as $index => $element) {
+            if (!is_array($element)) {
+                continue;
+            }
+
+            if (($element['type'] ?? '') === 'image') {
+                $element['src'] = app_normalize_layout_asset_reference($element['src'] ?? '');
+                $layout['elements'][$index] = $element;
+            }
+        }
+    }
+
+    return $layout;
+}
+
+function app_normalize_state_layouts(array $state): array
+{
+    if (isset($state['templates']) && is_array($state['templates'])) {
+        foreach ($state['templates'] as $index => $template) {
+            if (is_array($template) && is_array($template['layout'] ?? null)) {
+                $state['templates'][$index]['layout'] = app_normalize_template_layout($template['layout']);
+            }
+        }
+    }
+
+    if (isset($state['campaigns']) && is_array($state['campaigns'])) {
+        foreach ($state['campaigns'] as $index => $campaign) {
+            if (is_array($campaign) && is_array($campaign['campaignTemplateLayout'] ?? null)) {
+                $state['campaigns'][$index]['campaignTemplateLayout'] = app_normalize_template_layout($campaign['campaignTemplateLayout']);
+            }
+        }
+    }
+
+    return $state;
 }
 
 function app_merge_client_campaign(array $incoming, array $current): array
@@ -530,9 +577,14 @@ function app_validate_state(array $state): array
         throw new RuntimeException('Campaign limit exceeded.');
     }
 
-    foreach ($templates as $template) {
+    foreach ($templates as $index => $template) {
         if (!is_array($template) || trim((string) ($template['id'] ?? '')) === '' || trim((string) ($template['name'] ?? '')) === '') {
             throw new RuntimeException('Each template requires an id and name.');
+        }
+
+        if (is_array($template['layout'] ?? null)) {
+            $templates[$index]['layout'] = app_normalize_template_layout($template['layout']);
+            $template = $templates[$index];
         }
 
         $elements = $template['layout']['elements'] ?? [];
@@ -541,9 +593,14 @@ function app_validate_state(array $state): array
         }
     }
 
-    foreach ($campaigns as $campaign) {
+    foreach ($campaigns as $index => $campaign) {
         if (!is_array($campaign) || trim((string) ($campaign['id'] ?? '')) === '' || trim((string) ($campaign['name'] ?? '')) === '') {
             throw new RuntimeException('Each campaign requires an id and name.');
+        }
+
+        if (is_array($campaign['campaignTemplateLayout'] ?? null)) {
+            $campaigns[$index]['campaignTemplateLayout'] = app_normalize_template_layout($campaign['campaignTemplateLayout']);
+            $campaign = $campaigns[$index];
         }
 
         $queue = is_array($campaign['recipientQueue'] ?? null) ? $campaign['recipientQueue'] : [];

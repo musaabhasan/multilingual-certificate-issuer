@@ -121,8 +121,10 @@ final class CertificateRenderer
         if ($layout->background !== null && trim($layout->background) !== '') {
             $safePath = str_replace('\\', '/', (string) $layout->background);
             $source = $this->imageSource($safePath);
-            $frame = $this->backgroundFrame($layout, $safePath);
-            $mpdf->Image($source, $frame['left'], $frame['top'], $frame['width'], $frame['height'], '', '', true, false);
+            if ($source !== null) {
+                $frame = $this->backgroundFrame($layout, $safePath);
+                $mpdf->Image($source, $frame['left'], $frame['top'], $frame['width'], $frame['height'], '', '', true, false);
+            }
         }
 
         foreach ($layout->elements as $element) {
@@ -301,6 +303,9 @@ final class CertificateRenderer
         };
         $safePath = str_replace('\\', '/', $src);
         $source = $this->imageSource($safePath);
+        if ($source === null) {
+            return '';
+        }
         $frame = $this->elementFrame($element, $layout);
         $style = sprintf(
             "left:%smm; top:%smm; width:%smm; height:%smm; background-image:url('%s'); background-repeat:no-repeat; background-position:center; background-size:%s;",
@@ -329,6 +334,9 @@ final class CertificateRenderer
         $fit = in_array($fitValue, ['cover', 'contain', 'stretch'], true) ? $fitValue : 'contain';
         $safePath = str_replace('\\', '/', $src);
         $source = $this->imageSource($safePath);
+        if ($source === null) {
+            return;
+        }
         $frame = $this->elementFrame($element, $layout);
         if ($fit !== 'stretch') {
             $frame = $this->fittedImageFrame($frame, $safePath, $fit);
@@ -341,6 +349,9 @@ final class CertificateRenderer
     {
         $safePath = str_replace('\\', '/', (string) $layout->background);
         $source = $this->imageSource($safePath);
+        if ($source === null) {
+            return '';
+        }
         $frame = $this->backgroundFrame($layout, $safePath);
         $style = sprintf(
             "left:%smm; top:%smm; width:%smm; height:%smm; background-image:url('%s'); background-repeat:no-repeat; background-position:center; background-size:100%% 100%%;",
@@ -436,8 +447,17 @@ final class CertificateRenderer
         return null;
     }
 
-    private function imageSource(string $path): string
+    private function imageSource(string $path): ?string
     {
+        $path = trim($path);
+        if ($this->isMissingImagePath($path)) {
+            return null;
+        }
+
+        if (preg_match('/^data:image\/[a-zA-Z0-9.+-]+;base64,/', $path) === 1) {
+            return $path;
+        }
+
         foreach ($this->imagePathCandidates($path) as $candidate) {
             $resolved = realpath($candidate);
             if ($resolved !== false && is_file($resolved)) {
@@ -445,7 +465,13 @@ final class CertificateRenderer
             }
         }
 
-        return $path;
+        return null;
+    }
+
+    private function isMissingImagePath(string $path): bool
+    {
+        $value = strtolower(trim($path));
+        return in_array($value, ['', 'undefined', 'null', 'false', '#'], true);
     }
 
     /**
@@ -508,6 +534,10 @@ final class CertificateRenderer
      */
     private function imagePathCandidates(string $path): array
     {
+        if ($this->isMissingImagePath($path) || preg_match('/^data:/', $path) === 1) {
+            return [];
+        }
+
         $candidates = [$path];
         if (!preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) && !str_starts_with($path, '/')) {
             $relativePath = str_replace('/', DIRECTORY_SEPARATOR, $path);

@@ -345,6 +345,7 @@ function renderItemList() {
 
 function currentLayout() {
   const canvasRect = canvas.getBoundingClientRect();
+  const background = normalizeAssetPath(backgroundPath.value);
   const elements = [...canvas.querySelectorAll(".design-item")].map((item) => {
     const rect = item.getBoundingClientRect();
     const element = {
@@ -360,7 +361,7 @@ function currentLayout() {
     if (element.type === "verification_qr") {
       element.fit = "contain";
     } else if (element.type === "image") {
-      element.src = item.dataset.src;
+      element.src = normalizeAssetPath(item.dataset.src);
       element.fit = item.dataset.fit || "contain";
     } else {
       element.source = item.dataset.source;
@@ -377,10 +378,15 @@ function currentLayout() {
 
   return {
     page: { width: 297, height: 210, orientation: "landscape" },
-    background: backgroundPath.value.trim(),
+    background,
     backgroundFit: backgroundFit.value,
     elements
   };
+}
+
+function normalizeAssetPath(value) {
+  const trimmed = String(value || "").trim();
+  return ["undefined", "null", "false", "#"].includes(trimmed.toLowerCase()) ? "" : trimmed;
 }
 
 function exportJson() {
